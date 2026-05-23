@@ -1,4 +1,5 @@
 using UnityEngine;
+using static UnityEngine.GraphicsBuffer;
 
 // Student template: replace BuildTree() with an attacker or defender BT strategy.
 public class StudentBTStrategy : MonoBehaviour
@@ -40,7 +41,34 @@ public class StudentBTStrategy : MonoBehaviour
         // actionController.Move(direction), Attack(), Block(), or Dodge(direction).
         // TODO: Include at least two advanced elements in your final strategy:
         // DecoratorNode, ParallelNode, RandomSelectorNode, or another non-deterministic choice.
-        root = new ActionNode(() => BTNodeStatus.Failure);
+        root = new SelectorNode(
+
+        new SequenceNode(
+            new ConditionNode(ShouldDodge),
+            new ActionNode(DodgeAway)
+        ),
+
+        new SequenceNode(
+            new ConditionNode(IsInAttackRange),
+
+            new SelectorNode(
+
+                new SequenceNode(
+                    new ConditionNode(IsOpponentAttacking),
+                    new ActionNode(BlockTarget)
+                ),
+
+                new SequenceNode(
+                    new ConditionNode(IsOpponentBlocking),
+                    new ActionNode(MoveTowardTarget)
+                ),
+
+                new ActionNode(AttackTarget)
+            )
+        ),
+
+        new ActionNode(MoveTowardTarget)
+    );
     }
 
     private bool CanTick()
@@ -51,6 +79,82 @@ public class StudentBTStrategy : MonoBehaviour
             && actionController != null
             && !self.IsDead
             && !target.IsDead;
+    }
+
+    private bool ShouldDodge()
+    {
+        return self.CurrentHealthRatio <= 0.3f
+            && cooldownSystem != null
+            && cooldownSystem.IsDodgeReady();
+    }
+
+    private bool IsInAttackRange()
+    {
+        return DistanceToTarget() <= 1.6f
+            && IsFacingTarget(45f);
+    }
+
+    private BTNodeStatus DodgeAway()
+    {
+        actionController.Face(DirectionToTarget());
+        actionController.Dodge(-DirectionToTarget());
+        return BTNodeStatus.Success;
+    }
+
+    private BTNodeStatus AttackTarget()
+    {
+        if (cooldownSystem != null && cooldownSystem.IsAttackReady())
+        {
+            actionController.Face(DirectionToTarget());
+            actionController.Attack();
+            return BTNodeStatus.Success;
+        }
+
+        return BTNodeStatus.Failure;
+    }
+
+    private BTNodeStatus BlockTarget()
+    {
+        if (cooldownSystem != null && cooldownSystem.IsBlockReady())
+        {
+            actionController.Face(DirectionToTarget());
+            actionController.Block();
+            return BTNodeStatus.Success;
+        }
+
+        return BTNodeStatus.Failure;
+    }
+
+
+
+    private BTNodeStatus MoveTowardTarget()
+    {
+        Vector3 dir = DirectionToTarget();
+        Vector3 side = Vector3.Cross(Vector3.up, dir).normalized;
+        Vector3 moveDir = (dir + side * 0.6f).normalized;
+
+        actionController.Move(moveDir);
+        return BTNodeStatus.Success;
+    }
+
+    private BTNodeStatus FaceTarget()
+    {
+        actionController.Face(DirectionToTarget());
+        return BTNodeStatus.Success;
+    }
+
+    private bool IsOpponentAttacking()
+    {
+        return target != null
+            && target.ActionController != null
+            && target.ActionController.IsAttacking;
+    }
+
+    private bool IsOpponentBlocking()
+    {
+        return target != null
+            && target.ActionController != null
+            && target.ActionController.IsBlocking;
     }
 
     private Vector3 DirectionToTarget()
@@ -103,3 +207,4 @@ public class StudentBTStrategy : MonoBehaviour
         }
     }
 }
+
