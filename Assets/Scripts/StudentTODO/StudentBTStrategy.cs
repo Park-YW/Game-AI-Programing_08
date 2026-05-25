@@ -43,9 +43,14 @@ public class StudentBTStrategy : MonoBehaviour
         // DecoratorNode, ParallelNode, RandomSelectorNode, or another non-deterministic choice.
         root = new SelectorNode(
 
-        new SequenceNode(
-            new ConditionNode(ShouldDodge),
-            new ActionNode(DodgeAway)
+
+
+        new DecoratorNode(
+            new SequenceNode(
+                new ConditionNode(ShouldDodge),
+                new ActionNode(DodgeAway)
+            ),
+            status => status
         ),
 
         new SequenceNode(
@@ -63,7 +68,15 @@ public class StudentBTStrategy : MonoBehaviour
                     new ActionNode(MoveTowardTarget)
                 ),
 
-                new ActionNode(AttackTarget)
+                new ActionNode(() =>
+                {
+                    if (Random.value < 0.8f)
+                    {
+                        return AttackTarget();
+                    }
+
+                    return BTNodeStatus.Failure;
+                })
             )
         ),
 
@@ -129,13 +142,11 @@ public class StudentBTStrategy : MonoBehaviour
 
     private BTNodeStatus MoveTowardTarget()
     {
-        Vector3 dir = DirectionToTarget();
-        Vector3 side = Vector3.Cross(Vector3.up, dir).normalized;
-        Vector3 moveDir = (dir + side * 0.6f).normalized;
-
-        actionController.Move(moveDir);
+        actionController.Move(DirectionToTarget());
         return BTNodeStatus.Success;
     }
+
+
 
     private BTNodeStatus FaceTarget()
     {
