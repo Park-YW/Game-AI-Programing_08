@@ -20,14 +20,42 @@ public class StudentBTStrategy : MonoBehaviour
 
     public class Blackboard
     {
+        // [기존 변수] 타겟 상태 정보
         public float TargetHealthRatio;
         public bool IsTargetAttacking;
         public bool IsTargetEvading;
         public bool IsTargetGuarding;
         public float DistanceToTarget;
 
+        // [기존 변수] 방향 상태
         public enum ManeuverType { None, Left, Right, Back, Forward, Idle }
         public ManeuverType CurrentManeuver = ManeuverType.None;
+
+        // ==============================================================
+        // [신규 추가] 상태 잠금 (State-Gating) 및 타이머 변수
+        // ==============================================================
+
+        /// <summary>
+        /// 현재 기동(이동) 로직이 실행 중인지 여부. 
+        /// true일 경우 트리 최상단에서 다른 거리 체크를 무시하고 이동 업데이트 브랜치로 직행합니다.
+        /// 위협(방어/회피)이 감지되거나, 기동 종료 조건이 만족되면 false로 해제해야 합니다.
+        /// </summary>
+        public bool IsManeuvering = false;
+
+        /// <summary>
+        /// 현재 기동(Maneuver)을 언제 종료할 것인지 기록하는 타임스탬프 (Time.time 기준)
+        /// </summary>
+        public float ManeuverEndTime = 0f;
+
+        /// <summary>
+        /// 구르기 캐치나 특수 압박 기동의 쿨타임을 관리하는 타임스탬프 (Time.time 기준)
+        /// 데코레이터의 로컬 변수 초기화 문제를 해결하기 위해 BB로 옮겼습니다.
+        /// </summary>
+        public float NextChaseTime = 0f;
+
+        // 구르기 캐치 타이머용
+        public bool IsWaitingForRollCatch = false;
+        public float RollCatchEndTime = 0f;
     }
 
     private void Awake()
@@ -61,9 +89,10 @@ public class StudentBTStrategy : MonoBehaviour
         // actionController.Move(direction), Attack(), Block(), or Dodge(direction).
         // TODO: Include at least two advanced elements in your final strategy:
         // DecoratorNode, ParallelNode, RandomSelectorNode, or another non-deterministic choice.
-        float lastChaseTime = -999f;
-        float rollCatchTimer = 0f;
 
+        // ---------------------------------------------------------
+        // 공통 노드: Blackboard 상태 업데이트 (매 프레임 실행)
+        // ---------------------------------------------------------
         var updateBBNode = new ActionNode(() =>
         {
             bb.TargetHealthRatio = target.CurrentHealthRatio;
@@ -75,193 +104,237 @@ public class StudentBTStrategy : MonoBehaviour
             return BTNodeStatus.Success;
         });
 
-        var brainNode = new SelectorNode(
+        // =========================================================
+        // [1] Threat Response (위협 반응 - 최우선 순위)
+        // 적이 공격 중일 때 발동. 기존 이동(Maneuver) 상태를 강제 해제하고 회피/방어 수행
+        // =========================================================
+        var threatResponseSeq = new SequenceNode(
+            // 진입 조건: 적이 공격 중인가?
+            new ConditionNode(() => bb.IsTargetAttacking),
 
-            // [2-1. 위협 반응 (최우선 방어/회피)]
-            new SequenceNode(
-                new ConditionNode(() => bb.IsTargetAttacking),
-                new SelectorNode(
-                    new SequenceNode(
-                        new ConditionNode(CanDodge),
-                        new ActionNode(ActionDodgeBackward)
-                    ),
-                    new SequenceNode(
-                        new ConditionNode(CanBlock),
-                        new ActionNode(ActionBlock)
-                    )
-                )
-            ),
+            // 상태 잠금 해제: 진행 중이던 기동을 즉시 취소하여 Jitter 방지
+            new ActionNode(() => {
+                if (bb.IsManeuvering)
+                {
+                    bb.IsManeuvering = false;
+                    bb.CurrentManeuver = Blackboard.ManeuverType.None;
+                }
+                return BTNodeStatus.Success;
+            }),
 
-            // [2-2. 처형 및 패닉 롤 캐치 로직]
-            new SequenceNode(
-                new ConditionNode(() => bb.TargetHealthRatio <= 0.3f),
-
-                // [수정된 Decorator 1: 쿨타임 게이트 및 부가 효과]
-                // ConditionNode의 성공(Success) 결과를 가로채어 타이머를 리셋하고 그대로 Success를 반환합니다.
-                new DecoratorNode(
-                    new ConditionNode(() => Time.time - lastChaseTime >= 2.0f),
-                    (status) =>
-                    {
-                        if (status == BTNodeStatus.Success)
-                        {
-                            lastChaseTime = Time.time;
-                            return BTNodeStatus.Success;
-                        }
-                        return BTNodeStatus.Failure;
-                    }
-                ),
-
-                new SelectorNode(
-                    // A. 구르기 캐치 (타이밍 조절 + 기본 공격)
-                    new SequenceNode(
-
-                        // [수정된 Decorator 2: Wait Timer (상태 변조)]
-                        // 적이 회피 중이면(Success) 즉시 공격으로 넘어가지 않고 0.3초간 'Running'으로 변환하여 트리를 붙잡아둡니다.
-                        new DecoratorNode(
-                            new ConditionNode(() => bb.IsTargetEvading),
-                            (status) =>
-                            {
-                                if (status == BTNodeStatus.Success)
-                                {
-                                    rollCatchTimer += Time.deltaTime;
-                                    if (rollCatchTimer >= 0.3f)
-                                    {
-                                        rollCatchTimer = 0f;
-                                        return BTNodeStatus.Success; // 타이머 완료 시 비로소 Success 반환 -> 다음 공격 노드 실행
-                                    }
-                                    return BTNodeStatus.Running; // 0.3초 전까지는 Running
-                                }
-                                rollCatchTimer = 0f; // 회피 중이 아니면 실패 및 타이머 초기화
-                                return status;
-                            }
-                        ),
-                        new ActionNode(ActionAttack) // 대기(Running)가 끝나고 Success가 반환되면 실행됨
-                    ),
-
-                    // B. 회피 유도 압박 (기본 이동과 대기의 무작위 조합)
-                    new SequenceNode( // 압박 로직을 묶기 위한 Sequence
-                                      // 1단계: 방향 결정
-                        new SelectorNode(
-                            new SequenceNode(
-                                new ConditionNode(() => bb.CurrentManeuver != Blackboard.ManeuverType.None),
-                                new ActionNode(() => BTNodeStatus.Success)
-                            ),
-                            new RandomSelectorNode(
-                                new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Forward; return BTNodeStatus.Success; }),
-                                new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Idle; return BTNodeStatus.Success; }),
-                                new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Left; return BTNodeStatus.Success; }),
-                                new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Right; return BTNodeStatus.Success; })
-                            )
-                        ),
-                        // 2단계: 실행 및 상태 검증 (Parallel)
-                        new DecoratorNode(
-                            new ParallelNode(1, 1,
-                                // 적이 공격하거나 회피를 시작하면 즉시 압박 기동 취소
-                                new ConditionNode(() => bb.TargetHealthRatio <= 0.3f && !bb.IsTargetAttacking && !bb.IsTargetEvading),
-                                new ActionNode(() =>
-                                {
-                                    if (bb.CurrentManeuver == Blackboard.ManeuverType.Forward) ActionMoveIn();
-                                    else if (bb.CurrentManeuver == Blackboard.ManeuverType.Idle) ActionIdle();
-                                    else if (bb.CurrentManeuver == Blackboard.ManeuverType.Left) ActionSideStepLeft();
-                                    else if (bb.CurrentManeuver == Blackboard.ManeuverType.Right) ActionSideStepRight();
-
-                                    return BTNodeStatus.Running; // 흐름 유지
-                                })
-                            ),
-                            (status) =>
-                            {
-                                if (status != BTNodeStatus.Running) bb.CurrentManeuver = Blackboard.ManeuverType.None;
-                                return status;
-                            }
-                        )
-                    )
-                )
-            ),
-
-            // [2-3. 일반 공격]
-            new SequenceNode(
-                new ConditionNode(CanAttackCooldown),
-                new ConditionNode(() => bb.DistanceToTarget <= attackDistance),
-
-                // [수정된 Decorator 3: Invert (결과 반전)]
-                // 가드 중인지 확인한 결과를 반전시킵니다. (가드 중이면 Failure, 아니면 Success)
-                new DecoratorNode(
-                    new ConditionNode(() => bb.IsTargetGuarding),
-                    (status) => status == BTNodeStatus.Success ? BTNodeStatus.Failure : BTNodeStatus.Success
-                ),
-                new DecoratorNode(
-                    new ConditionNode(() => bb.IsTargetEvading),
-                    (status) => status == BTNodeStatus.Success ? BTNodeStatus.Failure : BTNodeStatus.Success
-                ),
-
-                new ActionNode(ActionAttack)
-            ),
-
-            // [2-4. 거리 조절 (아웃복싱 기동)]
+            // 방어 행동 선택 (회피 우선, 불가 시 가드)
             new SelectorNode(
                 new SequenceNode(
-                    new ConditionNode(() => bb.DistanceToTarget > farDistance),
-                    new ActionNode(ActionMoveIn)
+                    new ConditionNode(CanDodge),
+                    new ActionNode(ActionDodgeBackward)
                 ),
                 new SequenceNode(
-                    new ConditionNode(() => bb.DistanceToTarget <= maintainDistance),
-
-                    // 1단계: 방향 결정 (CurrentManeuver가 None일 때만 RandomSelector 실행)
-                    new SelectorNode(
-                        // 이미 방향이 정해져 있다면 무시하고 다음으로 넘어감
-                        new SequenceNode(
-                            new ConditionNode(() => bb.CurrentManeuver != Blackboard.ManeuverType.None),
-                            new ActionNode(() => BTNodeStatus.Success)
-                        ),
-                        // 방향이 정해져 있지 않다면 난수로 하나를 선택하여 BB에 저장
-                        new RandomSelectorNode(
-                            new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Left; return BTNodeStatus.Success; }),
-                            new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Right; return BTNodeStatus.Success; }),
-                            new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Back; return BTNodeStatus.Success; })
-                        )
-                    ),
-
-                    // 2단계: Parallel 검증 및 이동 실행 (Until Fail)
-                    // Decorator를 씌워 Parallel이 종료될 때 상태를 다시 None으로 초기화합니다.
-                    new DecoratorNode(
-                        new ParallelNode(1, 1, // Success 임계값 1, Fail 임계값 1
-
-                            // [검증 조건] 이 조건이 Fail을 반환하는 순간 Parallel 전체가 즉시 Fail로 종료됨
-                            new ConditionNode(() =>
-                                // maintainDistance(3.5f)에 진입했더라도, 빠져나갈 때는 약간의 여유(예: + 0.3f)를 주어 경계선 떨림 방지
-                                bb.DistanceToTarget <= maintainDistance + 0.3f &&
-                                !bb.IsTargetAttacking
-                            ),
-
-                            // [이동 실행] Blackboard에 저장된 방향으로 이동
-                            new ActionNode(() =>
-                            {
-                                if (bb.CurrentManeuver == Blackboard.ManeuverType.Left) ActionSideStepLeft();
-                                else if (bb.CurrentManeuver == Blackboard.ManeuverType.Right) ActionSideStepRight();
-                                else if (bb.CurrentManeuver == Blackboard.ManeuverType.Back) ActionMoveBack();
-
-                                // 이동하면서 항상 Running을 반환하여 트리의 흐름을 이곳에 유지
-                                return BTNodeStatus.Running;
-                            }
-                            )
-                        ),
-                        (status) =>
-                        {
-                            // Parallel이 Success나 Fail로 끝났다면(조건 불만족 등), 방향 상태를 초기화
-                            if (status != BTNodeStatus.Running)
-                            {
-                                bb.CurrentManeuver = Blackboard.ManeuverType.None;
-                            }
-                            return status;
-                        }
-                    )
+                    new ConditionNode(CanBlock),
+                    new ActionNode(ActionBlock)
                 )
-            ),
-            // [2-5. 기본 대기]
-            new ActionNode(ActionIdle)
+            )
         );
 
-        root = new ParallelNode(1, 1, updateBBNode, brainNode);
+        // =========================================================
+        // [2] Maneuver UPDATE (기동 유지)
+        // =========================================================
+        var maneuverUpdateSeq = new SequenceNode(
+            new ConditionNode(() => bb.IsManeuvering),
+
+            new SelectorNode(
+                // [A. 종료 조건 브랜치]
+                new SequenceNode(
+                    // [수정됨] 방향에 따라 논리적으로 종료 조건을 다르게 적용합니다.
+                    new ConditionNode(() => {
+                        // 1. 목표 시간이 끝났을 때 무조건 종료
+                        if (Time.time >= bb.ManeuverEndTime) return true;
+
+                        // 2. 전진 중일 때: 목표 거리(maintainDistance)까지 좁혀졌다면 조기 종료
+                        if (bb.CurrentManeuver == Blackboard.ManeuverType.Forward && bb.DistanceToTarget <= maintainDistance) return true;
+
+                        // 3. 후진 중일 때: 충분히 거리가 벌어졌다면 조기 종료
+                        if (bb.CurrentManeuver == Blackboard.ManeuverType.Back && bb.DistanceToTarget > maintainDistance + 1.0f) return true;
+
+                        return false;
+                    }),
+
+                    new ActionNode(() => {
+                        bb.IsManeuvering = false;
+                        bb.CurrentManeuver = Blackboard.ManeuverType.None;
+                        return BTNodeStatus.Success;
+                    })
+                ),
+
+                // [B. 이동 실행 브랜치]
+                new ActionNode(() => {
+                    if (bb.CurrentManeuver == Blackboard.ManeuverType.Left) ActionSideStepLeft();
+                    else if (bb.CurrentManeuver == Blackboard.ManeuverType.Right) ActionSideStepRight();
+                    else if (bb.CurrentManeuver == Blackboard.ManeuverType.Back) ActionMoveBack();
+                    else if (bb.CurrentManeuver == Blackboard.ManeuverType.Forward) ActionMoveIn();
+                    else ActionIdle();
+
+                    return BTNodeStatus.Success;
+                })
+            )
+        );
+
+        // =========================================================
+        // [3] Execute & Pressure (처형 및 압박)
+        // 타겟의 체력이 30% 이하일 때 발동. 구르기를 캐치하거나 공격적인 기동으로 압박합니다.
+        // =========================================================
+        var executeAndPressureSeq = new SequenceNode(
+            // 진입 조건 1: 타겟 체력이 30% 이하인가?
+            new ConditionNode(() => bb.TargetHealthRatio <= 0.3f),
+            // 진입 조건 2: 처형 패턴 쿨타임(2초)이 지났는가?
+            new ConditionNode(() => Time.time >= bb.NextChaseTime),
+
+            new SelectorNode(
+                // -------------------------------------------------
+                // [A. 구르기 캐치 (Roll Catch)]
+                // -------------------------------------------------
+                new SequenceNode(
+                    // 타겟이 회피 중이거나, 이미 우리가 타이머를 재고 있는 중일 때 진입
+                    // (회피 모션이 0.3초보다 빨리 끝나더라도 타이머를 끝까지 마치기 위함)
+                    new ConditionNode(() => bb.IsTargetEvading || bb.IsWaitingForRollCatch),
+
+                    new ActionNode(() => {
+                        if (!bb.IsWaitingForRollCatch)
+                        {
+                            bb.IsWaitingForRollCatch = true;
+                            bb.RollCatchEndTime = Time.time + 0.3f;
+                        }
+
+                        if (Time.time < bb.RollCatchEndTime)
+                        {
+                            actionController.UpdateRotationLock(GetDirectionToTarget());
+                            // [핵심 변경] Running 대신 Success 반환!
+                            // IsWaitingForRollCatch가 true이므로, 다음 프레임에 조건문을 통과해 다시 여기로 옵니다.
+                            // 하지만 그전에 [위협 반응]을 틱(Tick)할 수 있는 기회를 보장받습니다!
+                            return BTNodeStatus.Success;
+                        }
+
+                        bb.IsWaitingForRollCatch = false;
+                        ActionAttack();
+                        bb.NextChaseTime = Time.time + 2.0f;
+                        return BTNodeStatus.Success;
+                    })
+                ),
+
+                // -------------------------------------------------
+                // [B. 압박 기동 (Pressure ENTRY)]
+                // -------------------------------------------------
+                new SequenceNode(
+                    // 이미 기동 중이라면 방향을 덮어쓰지 않음
+                    new ConditionNode(() => !bb.IsManeuvering),
+
+                    new ActionNode(() => {
+                        // 뒤로 가는(Back) 기동을 배제하고 전진, 좌, 우 중 랜덤하게 압박 방향 결정
+                        int rand = UnityEngine.Random.Range(0, 3);
+                        if (rand == 0) bb.CurrentManeuver = Blackboard.ManeuverType.Forward;
+                        else if (rand == 1) bb.CurrentManeuver = Blackboard.ManeuverType.Left;
+                        else bb.CurrentManeuver = Blackboard.ManeuverType.Right;
+
+                        // 상태 잠금(IsManeuvering) 발동 및 1.0초 ~ 1.5초의 압박 타이머 세팅
+                        bb.IsManeuvering = true;
+                        bb.ManeuverEndTime = Time.time + UnityEngine.Random.Range(1.0f, 1.5f);
+
+                        // 처형 패턴 쿨타임을 초기화하여 압박 중 다른 패턴이 난입하지 않게 함
+                        bb.NextChaseTime = bb.ManeuverEndTime;
+
+                        // 여기서는 이동 함수(Move)를 직접 호출하지 않습니다!
+                        // Success를 반환하면 다음 프레임에 [2번 브랜치: Maneuver UPDATE]가
+                        // BB에 적힌 방향과 남은 시간을 보고 대신 이동시켜 줍니다.
+                        return BTNodeStatus.Success;
+                    })
+                )
+            )
+        );
+
+        // =========================================================
+        // [4] Normal Attack (일반 공격)
+        // 적과 충분히 가깝고, 공격 쿨타임이 돌았을 때 실행
+        // =========================================================
+        var normalAttackSeq = new SequenceNode(
+            // 진입 조건 1: 공격 사거리 이내인가?
+            new ConditionNode(() => bb.DistanceToTarget <= attackDistance),
+            // 진입 조건 2: 공격 쿨타임이 준비되었는가?
+            new ConditionNode(CanAttackCooldown),
+
+            // 진입 조건 3 & 4: 적이 무적(회피)이거나 방어 중이면 공격 낭비 방지
+            new DecoratorNode(
+                new ConditionNode(() => bb.IsTargetGuarding),
+                (status) => status == BTNodeStatus.Success ? BTNodeStatus.Failure : BTNodeStatus.Success
+            ),
+            new DecoratorNode(
+                new ConditionNode(() => bb.IsTargetEvading),
+                (status) => status == BTNodeStatus.Success ? BTNodeStatus.Failure : BTNodeStatus.Success
+            ),
+
+            // 조건 통과 시 공격 실행
+            new ActionNode(ActionAttack)
+        );
+
+        // =========================================================
+        // [5] Maneuver ENTRY (기동 진입)
+        // 타겟과 거리가 멀어졌을 때, 거리를 좁히거나 일정 거리를 유지하기 위한 기동을 시작합니다.
+        // =========================================================
+        var maneuverEntrySeq = new SequenceNode(
+            // 핵심 조건: 현재 기동 중이 아닐 때(잠금 해제 상태일 때)만 새 방향을 결정합니다.
+            new ConditionNode(() => !bb.IsManeuvering),
+
+            new SelectorNode(
+                // [A. 먼 거리 - 전진 기동]
+                new SequenceNode(
+                    new ConditionNode(() => bb.DistanceToTarget > farDistance),
+                    new ActionNode(() => {
+                        bb.CurrentManeuver = Blackboard.ManeuverType.Forward;
+                        // 상태 잠금 및 유지 시간(0.5초 ~ 1.0초) 세팅
+                        bb.IsManeuvering = true;
+                        bb.ManeuverEndTime = Time.time + UnityEngine.Random.Range(0.5f, 1.0f);
+                        return BTNodeStatus.Success;
+                    })
+                ),
+
+                // [B. 애매한 거리 - 거리 유지 기동 (아웃복싱)]
+                new SequenceNode(
+                    new ConditionNode(() => bb.DistanceToTarget <= maintainDistance),
+                    new ActionNode(() => {
+                        // 전진을 제외하고 좌, 우, 뒤 중 하나로 스텝을 밟음
+                        int rand = UnityEngine.Random.Range(0, 3);
+                        if (rand == 0) bb.CurrentManeuver = Blackboard.ManeuverType.Left;
+                        else if (rand == 1) bb.CurrentManeuver = Blackboard.ManeuverType.Right;
+                        else bb.CurrentManeuver = Blackboard.ManeuverType.Back;
+
+                        bb.IsManeuvering = true;
+                        bb.ManeuverEndTime = Time.time + UnityEngine.Random.Range(0.5f, 1.2f);
+                        return BTNodeStatus.Success;
+                    })
+                )
+            )
+        );
+
+        // =========================================================
+        // [6] Idle (대기)
+        // 위 모든 브랜치의 조건을 만족하지 못했을 때 (예: 거리가 3.5 ~ 5.0 사이이면서 기동 중이 아닐 때)
+        // =========================================================
+        var idleAction = new ActionNode(ActionIdle);
+
+        // =========================================================
+        // 최종 조립 (Root Node 구성)
+        // 우선순위 순서대로 Selector에 배치합니다.
+        // =========================================================
+        var brainNode = new SelectorNode(
+            threatResponseSeq,       // [1] 최우선: 위협 반응 (방어/회피)
+            maneuverUpdateSeq,       // [2] 상태 1순위: 기동 중이라면 다른 거 무시하고 계속 걷기
+            executeAndPressureSeq,   // [3] 공격 1순위: 처형 및 특수 압박
+            normalAttackSeq,         // [4] 공격 2순위: 일반 사거리 내 공격
+            maneuverEntrySeq,        // [5] 상태 2순위: 가만히 서있다면 새로 거리 조절 시작
+            idleAction               // [6] 최하위: 모두 아니면 대기하며 타겟 주시
+        );
+
+        // ParallelNode(2, 1)로 수정하여 Success 즉시 종료 버그 우회 (Stateless 환경 대응)
+        // 1번(Success 임계값)을 2로 올려, 틱 중 조건 만족으로 끝나지 않고 Running을 보장합니다.
+        root = new ParallelNode(2, 1, updateBBNode, brainNode);
 
     }
 
@@ -378,6 +451,9 @@ public class StudentBTStrategy : MonoBehaviour
 
     private BTNodeStatus ActionIdle()
     {
+        // [추가된 핵심 코드] 이동을 확실하게 멈춥니다!
+        actionController.Move(Vector3.zero);
+
         // 타겟을 향해 몸을 돌리며 대기
         if (!actionController.IsAttacking && !actionController.IsInvincible)
         {
@@ -397,24 +473,5 @@ public class StudentBTStrategy : MonoBehaviour
         Vector3 offset = target.transform.position - transform.position;
         offset.y = 0f;
         return offset;
-    }
-
-    BTNode CreateSustainedAction(Func<BTNodeStatus> actionFunc, float duration)
-    {
-        float timer = 0f;
-        return new DecoratorNode(
-            new ActionNode(actionFunc),
-            (status) =>
-            {
-                // ActionNode(이동 명령)는 매 프레임 실행됨
-                timer += Time.deltaTime;
-                if (timer >= duration)
-                {
-                    timer = 0f; // 타이머 초기화
-                    return BTNodeStatus.Success; // 지정된 시간이 끝나면 비로소 Success
-                }
-                return BTNodeStatus.Running; // 그 전까지는 트리의 흐름을 이곳에 붙잡아둠 (Running)
-            }
-        );
     }
 }
