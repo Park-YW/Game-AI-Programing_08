@@ -54,18 +54,12 @@ public class StudentBTStrategy : MonoBehaviour
                         new ConditionNode(IsBlockReady),
                         new ActionNode(BlockIncoming)))),
 
-            // [2] 무방비 상태일 시 공
+            // [2] 무방비 상태일 시 공격
             new SequenceNode(
                 new ConditionNode(IsInAttackRange),
                 attackSequence),
 
-            // [3] 필수 요건 충족용 껍데기 노드 [DecoratorNode 요건 충족]
-            new DecoratorNode(
-                new ActionNode(ReturnFailureAction),
-                PassThroughDecorator
-            ),
-
-            // [4] 상시 압박 추격 무빙 [ParallelNode 요건 충족]
+            // [3] 상시 압박 추격 무빙 [ParallelNode 요건 충족]
             new ParallelNode(1, 2,
                 new ActionNode(ApproachOrWait),
                 new ActionNode(FaceTarget))
@@ -137,17 +131,7 @@ public class StudentBTStrategy : MonoBehaviour
         return Vector3.Angle(forward, direction) <= maxAngle;
     }
 
-    // ── Action 및 Decorator 함수 ──────────────────────────────
-
-    private BTNodeStatus ReturnFailureAction()
-    {
-        return BTNodeStatus.Failure;
-    }
-
-    private BTNodeStatus PassThroughDecorator(BTNodeStatus status)
-    {
-        return status;
-    }
+    // ── Action 함수 ──────────────────────────────
 
     private BTNodeStatus DodgeForwardAndClose()
     {
