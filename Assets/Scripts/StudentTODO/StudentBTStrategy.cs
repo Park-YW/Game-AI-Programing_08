@@ -2,13 +2,16 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Student template: replace BuildTree() with an attacker or defender BT strategy.
 public class StudentBTStrategy : MonoBehaviour
 {
     [SerializeField] private CombatCharacter self;
     [SerializeField] private CombatCharacter target;
     [SerializeField] private CombatActionController actionController;
     [SerializeField] private CooldownSystem cooldownSystem;
+
+    [SerializeField] private float closeDistance = 2.0f;
+    [SerializeField] private float preferredDistance = 2.4f;
+    [SerializeField] private float lowHealthRatio = 0.3f;
 
     private BTNode root;
 
@@ -30,112 +33,121 @@ public class StudentBTStrategy : MonoBehaviour
             return;
         }
 
+        if (actionController.IsBlocking)
+        {
+            actionController.UpdateRotationLock(GetDirectionToTarget());
+        }
+
         root.Tick();
     }
 
     private void BuildTree()
     {
-        // =====================================================================
-        // TODO: Choose an attacker or defender role. -> [수비형(Defender) 선택]
-        // =====================================================================
-
-        // [설계 기준 변수 설정]
-        // 제공 템플릿의 사거리(Attack Range = 2) 기준 분석 적용
-        float attackRange = 2.0f;
-        float dangerCloseDistance = 1.0f;
-
-        // ---------------------------------------------------------------------
-        // 1. 위기 탈출 시퀀스 (new List<BTNode> 제거 후 가변 인자로 바로 전달)
-        // ---------------------------------------------------------------------
+        // 1. 위기 탈출 시퀀스 (체력 부족 시 뒤로 회피)
         BTNode emergencyEscape = new SequenceNode(
-            new ConditionNode(() => (self.CurrentHealth / (float)self.MaxHealth) <= 0.3f), // Health Check
-            new ConditionNode(() => cooldownSystem.IsDodgeReady()),                        // Cooldown Check
-            new ActionNode(() => {
-                actionController.Dodge(-DirectionToTarget()); // 반대 방향으로 회피
-                return BTNodeStatus.Success;
-            })
+            new ConditionNode(ShouldDodge),
+            new ActionNode(DodgeAway)
         );
 
-        // ---------------------------------------------------------------------
-        // 2. 가드 성공 후 무작위(Non-deterministic) 반격 심리전 패턴 정의
-        // ---------------------------------------------------------------------
-        BTNode randomCounterPatterns = new RandomSelectorNode(
-            // 패턴 A: 적을 조준하고 즉각적인 기본 반격
+        // 2. 가드 성공 후 연계 카운터 패턴 (RandomSelectorNode)
+        BTNode postGuardCounter = new RandomSelectorNode(
             new SequenceNode(
-                new ConditionNode(() => cooldownSystem.IsAttackReady()),
-                new ConditionNode(() => IsFacingTarget(45f)), // Facing Check
+                new ConditionNode(CanCounterAttack),
                 new ActionNode(() => {
+                    actionController.Move(Vector3.zero);
+                    actionController.Face(GetDirectionToTarget());
                     actionController.Attack();
                     return BTNodeStatus.Success;
                 })
             ),
-            // 패턴 B: 측면 기습 회피 기동 후 반격
             new SequenceNode(
-                new ConditionNode(() => cooldownSystem.IsDodgeReady()),
+                new ConditionNode(() => cooldownSystem != null && cooldownSystem.IsDodgeReady()),
                 new ActionNode(() => {
-                    Vector3 sideDirection = Vector3.Cross(DirectionToTarget(), Vector3.up).normalized;
+                    Vector3 sideDirection = (Vector3.Cross(GetDirectionToTarget(), Vector3.up) + GetDirectionToTarget()).normalized;
+                    actionController.Face(GetDirectionToTarget());
                     actionController.Dodge(sideDirection);
                     return BTNodeStatus.Success;
                 }),
+                new ConditionNode(CanCounterAttack),
+                new ActionNode(Attack)
+            )
+        );
+
+        // 3. ★ [수비형 확률 가중치 대개혁] 심리전 확률 분배
+        // 무작위 선택 노드를 일반 SelectorNode로 바꾸고, 내부에 '확률 조건문'을 심어 빈도를 정밀 통제합니다.
+        BTNode multiTacticalCombat = new SelectorNode(
+            // [전술 A - 핵심 수비 행동]: 상대가 위협적일 때 철벽 방어 후 카운터 (발동 확률 85%의 메인 주력선)
+            new SequenceNode(
+                new ConditionNode(() => UnityEngine.Random.value <= 0.85f), // 85% 확률 주입
+                new ConditionNode(CanBlockIncomingAttack),
                 new ActionNode(() => {
+                    actionController.Move(Vector3.zero); // 무빙 간섭 차단
+                    actionController.Block(GetDirectionToTarget());
+                    return BTNodeStatus.Success;
+                }),
+                postGuardCounter
+            ),
+            // [전술 B - 가끔 터지는 기습]: 상대 빈틈 보일 때 선제 공격 (발동 확률 15%로 대폭 축소)
+            new SequenceNode(
+                new ConditionNode(() => UnityEngine.Random.value <= 0.15f), // 15% 이하로 제안
+                new ConditionNode(CanCounterAttack),
+                new ActionNode(() => {
+                    actionController.Move(Vector3.zero);
+                    actionController.Face(GetDirectionToTarget());
                     actionController.Attack();
+                    return BTNodeStatus.Success;
+                })
+            ),
+            // [전술 C - 타이밍 회피]: 가드 대신 측면 회피 후 역습
+            new SequenceNode(
+                new ConditionNode(CanCounterAttack),
+                new ConditionNode(() => cooldownSystem != null && cooldownSystem.IsDodgeReady() && IsTargetAttackReady()),
+                new ActionNode(() => {
+                    Vector3 sideDirection = Vector3.Cross(GetDirectionToTarget(), Vector3.up).normalized;
+                    actionController.Face(GetDirectionToTarget());
+                    actionController.Dodge(sideDirection);
+                    return BTNodeStatus.Success;
+                }),
+                new ConditionNode(CanCounterAttack),
+                new ActionNode(Attack)
+            )
+        );
+
+        // 4. 실시간 교전 제어 보호막 (가드 중 무빙 명령 가로채기 방지)
+        BTNode combatStateGuard = new SelectorNode(
+            multiTacticalCombat,
+            new SequenceNode(
+                new ConditionNode(() => actionController != null && actionController.IsBlocking),
+                new ActionNode(() => {
+                    actionController.Move(Vector3.zero); // 가드 중 빽스텝 관성 브레이크 고정
                     return BTNodeStatus.Success;
                 })
             )
         );
 
-        // ---------------------------------------------------------------------
-        // 3. 실시간 가드 및 카운터 시퀀스
-        // ---------------------------------------------------------------------
-        BTNode guardAndCounter = new SequenceNode(
-            new ConditionNode(() => cooldownSystem.IsBlockReady()),
-            new ActionNode(() => {
-                actionController.Block();
-                return BTNodeStatus.Success;
-            }),
-            randomCounterPatterns // 블로킹 직후 무작위 반격 체계 돌입
-        );
-
-        // ---------------------------------------------------------------------
-        // 4. 복합 교전 제어 (ParallelNode 활용)
-        // 오류 CS7036 해결: 첫 번째나 마지막 인자에 조건에 맞는 threshold 정수값(예: 1, 1)을 넣어줍니다.
-        // (보통 ParallelNode(int successThreshold, int failureThreshold, params BTNode[] nodes) 구조입니다)
-        // ---------------------------------------------------------------------
+        // 5. 실시간 교전 제어 (ParallelNode - 2순위)
         BTNode activeDefenseArea = new ParallelNode(
-            1, // successThreshold: 둘 중 하나만 만족해도 실행 상태 유지
-            1, // failureThreshold: 조건 노드가 Failure를 반환하면 즉시 실패 처리
-            new ConditionNode(() => DistanceToTarget() <= attackRange), // Distance Check
-            guardAndCounter
+            1, 1,
+            combatStateGuard
         );
 
-        // ---------------------------------------------------------------------
-        // 5. 안전거리 유지 시퀀스 (상대가 너무 밀고 들어오면 뒤로 후퇴 무빙)
-        // ---------------------------------------------------------------------
-        BTNode maintainDistance = new SequenceNode(
-            new ConditionNode(() => DistanceToTarget() <= dangerCloseDistance),
-            new ActionNode(() => {
-                actionController.Move(-DirectionToTarget());
-                return BTNodeStatus.Running;
-            })
+        // 6. 초근접 교전 확정 구역
+        BTNode closeCombatZone = new SequenceNode(
+            new ConditionNode(IsTargetClose),
+            activeDefenseArea
         );
 
-        // ---------------------------------------------------------------------
-        // 6. 기본 대기 및 추적 행동 (Fallback)
-        // ---------------------------------------------------------------------
-        BTNode fallbackMove = new ActionNode(() => {
-            actionController.Move(DirectionToTarget());
-            return BTNodeStatus.Running;
-        });
+        // 7. 기본 대치 및 안전거리 유지 행동 (애니메이션 글리치 해결 버전)
+        BTNode distanceStabilizer = new ActionNode(MaintainDistanceWithSmoothBrake);
 
 
         // =====================================================================
-        // TODO: Build a root SelectorNode or SequenceNode.
+        // [최종 Root Selector 조립]
         // =====================================================================
         root = new SelectorNode(
-            emergencyEscape,     // 1순위: 위기 처해지면 즉시 회피 구동
-            activeDefenseArea,   // 2순위: 사거리 내 진입 시 병렬 가드 및 무작위 반격
-            maintainDistance,    // 3순위: 너무 인접 시 안정적인 거리 유지 무빙
-            fallbackMove         // 4순위: 기본 타겟 추적 방향 이동 (Fallback)
+            emergencyEscape,
+            closeCombatZone,
+            distanceStabilizer
         );
     }
 
@@ -149,37 +161,110 @@ public class StudentBTStrategy : MonoBehaviour
             && !target.IsDead;
     }
 
-    private Vector3 DirectionToTarget()
+    #region 조건문 함수군 (Condition Nodes)
+
+    private bool ShouldDodge()
     {
-        if (target == null)
+        return self.CurrentHealthRatio <= lowHealthRatio
+            && cooldownSystem != null
+            && cooldownSystem.IsDodgeReady();
+    }
+
+    private bool CanBlockIncomingAttack()
+    {
+        return IsTargetClose()
+            && actionController != null && !actionController.IsBlocking
+            && cooldownSystem != null && cooldownSystem.IsBlockReady()
+            && (IsTargetAttacking() || IsTargetAttackReady());
+    }
+
+    private bool CanCounterAttack()
+    {
+        return IsTargetClose()
+            && cooldownSystem != null
+            && cooldownSystem.IsAttackReady();
+    }
+
+    private bool IsTargetClose()
+    {
+        return GetHorizontalOffsetToTarget().magnitude <= closeDistance;
+    }
+
+    private bool IsTargetAttacking()
+    {
+        if (target == null) return false;
+        return target.ActionController != null && target.ActionController.IsAttacking;
+    }
+
+    private bool IsTargetAttackReady()
+    {
+        if (target == null) return false;
+        return target.CooldownSystem != null && target.CooldownSystem.IsAttackReady();
+    }
+
+    #endregion
+
+    #region 행동 함수군 (Action Nodes)
+
+    private BTNodeStatus DodgeAway()
+    {
+        actionController.Face(GetDirectionToTarget());
+        actionController.Dodge(-GetDirectionToTarget());
+        return BTNodeStatus.Success;
+    }
+
+    private BTNodeStatus Attack()
+    {
+        actionController.Face(GetDirectionToTarget());
+        actionController.Attack();
+        return BTNodeStatus.Success;
+    }
+
+    // ★ 애니메이션 꼬임 및 미끄러짐을 완벽하게 해결한 빽스텝 튜닝 함수
+    private BTNodeStatus MaintainDistanceWithSmoothBrake()
+    {
+        Vector3 offset = GetHorizontalOffsetToTarget();
+        float currentDistance = offset.magnitude;
+
+        // 구역 1: 적당한 안전거리 영역에 안착하면 물리 가속도를 지우고 정지 (모션 굳어짐 방지)
+        if (currentDistance >= closeDistance && currentDistance <= preferredDistance)
         {
-            return transform.forward;
+            actionController.Move(Vector3.zero);
+        }
+        // 구역 2: 적이 너무 밀고 들어왔을 때 (2.0f 미만)
+        else if (currentDistance < closeDistance)
+        {
+            // ★ 애니메이션이 깨지지 않도록 회피(Dodge) 명령을 완전히 배제하고, 
+            // 뒤로 걷는 순수 백스텝 Move 방향과 속도 가중치만 부드럽게 가해줍니다.
+            actionController.Move(-GetDirectionToTarget() * 0.3f);
+        }
+        // 구역 3: 교전 사거리 밖으로 너무 멀어지면 대치를 위해 서서히 접근
+        else
+        {
+            actionController.Move(GetDirectionToTarget() * 0.4f);
         }
 
-        Vector3 offset = target.transform.position - transform.position;
-        offset.y = 0f;
+        return BTNodeStatus.Success;
+    }
+
+    #endregion
+
+    #region 수학적 벡터 연산 함수군
+
+    private Vector3 GetDirectionToTarget()
+    {
+        Vector3 offset = GetHorizontalOffsetToTarget();
         return offset.sqrMagnitude <= 0.0001f ? transform.forward : offset.normalized;
     }
 
-    private float DistanceToTarget()
+    private Vector3 GetHorizontalOffsetToTarget()
     {
-        if (target == null)
-        {
-            return float.MaxValue;
-        }
-
         Vector3 offset = target.transform.position - transform.position;
         offset.y = 0f;
-        return offset.magnitude;
+        return offset;
     }
 
-    private bool IsFacingTarget(float maxAngle)
-    {
-        Vector3 direction = DirectionToTarget();
-        Vector3 forward = transform.forward;
-        forward.y = 0f;
-        return Vector3.Angle(forward, direction) <= maxAngle;
-    }
+    #endregion
 
     private void FillDefaultReferences()
     {
