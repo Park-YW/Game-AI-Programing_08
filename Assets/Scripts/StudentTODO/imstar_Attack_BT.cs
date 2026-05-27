@@ -2,7 +2,7 @@ using UnityEngine;
 using static UnityEngine.GraphicsBuffer;
 
 // Student template: replace BuildTree() with an attacker or defender BT strategy.
-public class StudentBTStrategy : MonoBehaviour
+public class imstar_Attack_BT : MonoBehaviour
 {
     [SerializeField] private CombatCharacter self;
     [SerializeField] private CombatCharacter target;
