@@ -13,27 +13,46 @@ public class MinwooBTStrategy : MonoBehaviour
     // 거리 설정
     [SerializeField] private float attackDistance = 1.8f;
     [SerializeField] private float maintainDistance = 3.5f;
-    [SerializeField] private float farDistance = 5.0f;
 
     private BTNode root;
     private Blackboard bb;
 
     public class Blackboard
     {
-        // [기존 변수] 타겟 상태 정보
+        // 타겟 상태 정보
         public float TargetHealthRatio;
         public bool IsTargetAttacking;
         public bool IsTargetEvading;
         public bool IsTargetGuarding;
         public float DistanceToTarget;
 
-        // [기존 변수] 방향 상태
+        // 방향 상태
         public enum ManeuverType { None, Left, Right, Back, Forward, Idle }
         public ManeuverType CurrentManeuver = ManeuverType.None;
 
         public float ManeuverEndTime = 0f;
         public float NextChaseTime = 0f;
         public float RollCatchEndTime = 0f;
+
+        // 상대 상태 확인용 뇌
+        public bool WasTargetAttacking = false; // 이전 프레임 공격 여부
+        public float TargetAttackStartTime = 0f;      // 적이 공격을 시작한 시간
+
+        public bool WasTargetEvading = false;  // 이전 프레임 회피 여부
+        public float TargetEvadeStartTime = 0f;      // 적이 회피를 시작한 시간
+
+        public bool WasTargetGuarding = false; // 이전 프레임 방어 여부
+        public float TargetGuardStartTime = 0f;      // 적이 방어를 시작한 시간
+
+        // 적의 예상 공격 쿨타임
+        public float EstimatedAttackCooldown = 1.5f;
+        public float EstimatedEvadeCooldown = 2.0f;
+        public float EstimatedGuardCooldown = 2.5f;
+
+        // 계산한 적의 쿨타임 종료 시점
+        public float TargetAttackVulnerableUntil;
+        public float TargetEvadeVulnerableUntil;
+        public float TargetGuardVulnerableUntil;
     }
 
     private void Awake()
@@ -65,28 +84,105 @@ public class MinwooBTStrategy : MonoBehaviour
         // ---------------------------------------------------------
         var updateBBNode = new ActionNode(() =>
         {
+            // 이전 프레임 상태 저장
+            bb.WasTargetAttacking = bb.IsTargetAttacking;
+            bb.WasTargetEvading = bb.IsTargetEvading;
+            bb.WasTargetGuarding = bb.IsTargetGuarding;
+
+            // 현재 타겟 체력 업데이트
             bb.TargetHealthRatio = target.CurrentHealthRatio;
+
+            // 타겟 행동 상태 업데이트
             bb.IsTargetAttacking = target.ActionController != null && target.ActionController.IsAttacking;
             bb.IsTargetEvading = target.ActionController != null && target.ActionController.IsInvincible;
             bb.IsTargetGuarding = target.ActionController != null && target.ActionController.IsBlocking;
             bb.DistanceToTarget = GetHorizontalOffsetToTarget().magnitude;
 
+            if (!bb.IsTargetAttacking && bb.WasTargetAttacking)
+            {
+                bb.TargetAttackVulnerableUntil = Time.time + bb.EstimatedAttackCooldown;
+            }
+
+            if (!bb.IsTargetEvading && bb.WasTargetEvading)
+            {
+                bb.TargetEvadeVulnerableUntil = Time.time + bb.EstimatedEvadeCooldown;
+            }
+
+            if (!bb.IsTargetGuarding && bb.WasTargetGuarding)
+            {
+                bb.TargetGuardVulnerableUntil = Time.time + bb.EstimatedEvadeCooldown;
+            }
+
+
+            // 다음 프레임 비교를 위해 현재 상태를 과거로 덮어쓰기
+            bb.WasTargetAttacking = bb.IsTargetAttacking;
+            bb.WasTargetEvading = bb.IsTargetEvading;
+            bb.WasTargetGuarding = bb.IsTargetGuarding;
+
             return BTNodeStatus.Success;
         });
 
         // =========================================================
-        // [1] Threat Response (위협 반응)
+        // [1] Threat Response (위협 반응) + 반격
         // =========================================================
+
+
+        // 가드 성공 후 연계 카운터 패턴 (RandomSelectorNode)
+        BTNode postGuardCounter = new RandomSelectorNode(
+            new SequenceNode(
+                new ConditionNode(CanAttackCooldown),
+                new ActionNode(() => {
+                    actionController.Move(Vector3.zero);
+                    actionController.Face(GetDirectionToTarget());
+                    actionController.Attack();
+                    return BTNodeStatus.Success;
+                })
+            ),
+            new SequenceNode(
+                new ConditionNode(() => cooldownSystem != null && cooldownSystem.IsDodgeReady()),
+                new ActionNode(() => {
+                    Vector3 sideDirection = (Vector3.Cross(GetDirectionToTarget(), Vector3.up) + GetDirectionToTarget()).normalized;
+                    actionController.Face(GetDirectionToTarget());
+                    actionController.Dodge(sideDirection);
+                    return BTNodeStatus.Success;
+                }),
+                new ConditionNode(CanAttackCooldown),
+                new ActionNode(ActionAttack)
+            )
+        );
+
+
+        BTNode Counter = new SequenceNode(
+                new ConditionNode(CanBlock),
+                new ActionNode(() =>
+                {
+                    actionController.Block(GetDirectionToTarget());
+                    return BTNodeStatus.Success;
+                }),
+                postGuardCounter
+        );
+
         var threatResponseSeq = new SequenceNode(
             new ConditionNode(() => bb.IsTargetAttacking),
             new SelectorNode(
                 new SequenceNode(
-                    new ConditionNode(CanDodge),
-                    new ActionNode(ActionDodgeBackward)
+                    new ConditionNode(CanBlock),
+                    Counter
                 ),
                 new SequenceNode(
                     new ConditionNode(CanBlock),
                     new ActionNode(ActionBlock)
+                ),
+                new SequenceNode(
+                    new ConditionNode(() =>
+                    {
+                        if(bb.TargetAttackVulnerableUntil - Time.time > 0.5f)
+                        {
+                            return true; // 공격이 곧 끝날 것 같으면 회피하지 않도록
+                        }
+                        return false;
+                    }),
+                    new ActionNode(ActionDodgeBackward)
                 )
             )
         );
@@ -95,6 +191,8 @@ public class MinwooBTStrategy : MonoBehaviour
         // [2] Execute & Pressure (처형 및 압박)
         // 타겟의 체력이 30% 이하일 때 발동. 구르기를 캐치하거나 압박 기동.
         // =========================================================
+
+
         var executeAndPressureSeq = new SequenceNode(
             new ConditionNode(() => bb.TargetHealthRatio <= 0.3f),
             new ConditionNode(() => Time.time >= bb.NextChaseTime),
@@ -165,24 +263,23 @@ public class MinwooBTStrategy : MonoBehaviour
         var normalAttackSeq = new SequenceNode(
             new ConditionNode(() => bb.DistanceToTarget <= attackDistance),
             new ConditionNode(CanAttackCooldown),
-            new DecoratorNode(
-                new ConditionNode(() => bb.IsTargetGuarding),
-                (status) => status == BTNodeStatus.Success ? BTNodeStatus.Failure : BTNodeStatus.Success
+
+            // 적이 가드/회피 쿨타임으로 인해 무방비 상태라면 공격
+            new ConditionNode(() =>
+                (!bb.IsTargetGuarding && !bb.IsTargetEvading) ||
+                (bb.TargetGuardVulnerableUntil - Time.time > 0.3f && bb.TargetEvadeVulnerableUntil - Time.time > 0.3f)
             ),
-            new DecoratorNode(
-                new ConditionNode(() => bb.IsTargetEvading),
-                (status) => status == BTNodeStatus.Success ? BTNodeStatus.Failure : BTNodeStatus.Success
-            ),
+
             new ActionNode(ActionAttack)
         );
 
         // =========================================================
-        // [4] Maneuver (기동 로직)
+        // [4] Maneuver (적과의 거리에 따른 대응 기동)
         // =========================================================
         var maneuverSeq = new SelectorNode(
-            // [A. 먼 거리 - 전진 기동]
+            // [A. 거리가 너무 멀 때 -> 거리를 좁히기 (전진)]
             new SequenceNode(
-                new ConditionNode(() => bb.DistanceToTarget > farDistance),
+                new ConditionNode(() => bb.DistanceToTarget > maintainDistance),
                 new ActionNode(() => {
                     bb.CurrentManeuver = Blackboard.ManeuverType.Forward;
                     bb.ManeuverEndTime = Time.time + UnityEngine.Random.Range(0.5f, 1.0f);
@@ -194,13 +291,13 @@ public class MinwooBTStrategy : MonoBehaviour
                 )
             ),
 
-            // [B. 애매한 거리 - 거리 유지 기동 (아웃복싱 - RandomSelector 도입)]
+            // [B. 거리가 적당할 때 -> 거리 유지 및 견제 (좌/우 사이드스텝 또는 제자리 견제)]
             new SequenceNode(
-                new ConditionNode(() => bb.DistanceToTarget <= maintainDistance),
+                new ConditionNode(() => bb.DistanceToTarget >= attackDistance && bb.DistanceToTarget <= maintainDistance),
                 new RandomSelectorNode(
                     new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Left; return BTNodeStatus.Success; }),
                     new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Right; return BTNodeStatus.Success; }),
-                    new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Back; return BTNodeStatus.Success; })
+                    new ActionNode(() => { bb.CurrentManeuver = Blackboard.ManeuverType.Idle; return BTNodeStatus.Success; }) // 제자리 유지
                 ),
                 new ActionNode(() => {
                     bb.ManeuverEndTime = Time.time + UnityEngine.Random.Range(0.5f, 1.2f);
@@ -210,15 +307,30 @@ public class MinwooBTStrategy : MonoBehaviour
                     new ConditionNode(() => {
                         if (bb.IsTargetAttacking) return true;
                         if (Time.time >= bb.ManeuverEndTime) return true;
-                        if (bb.CurrentManeuver == Blackboard.ManeuverType.Back && bb.DistanceToTarget > maintainDistance + 1.0f) return true;
+                        // 기동 중 거리가 적정 범위를 벗어나면 재평가를 위해 종료
+                        if (bb.DistanceToTarget < attackDistance || bb.DistanceToTarget > maintainDistance) return true;
                         return false;
                     }),
                     new ActionNode(() => {
                         if (bb.CurrentManeuver == Blackboard.ManeuverType.Left) ActionSideStepLeft();
                         else if (bb.CurrentManeuver == Blackboard.ManeuverType.Right) ActionSideStepRight();
-                        else ActionMoveBack();
+                        else ActionIdle(); // 정지 상태로 타겟 주시
                         return BTNodeStatus.Running;
                     })
+                )
+            ),
+
+            // [C. 거리가 너무 가까울 때 -> 거리 벌리기 (후퇴)]
+            new SequenceNode(
+                new ConditionNode(() => bb.DistanceToTarget < attackDistance),
+                new ActionNode(() => {
+                    bb.CurrentManeuver = Blackboard.ManeuverType.Back;
+                    bb.ManeuverEndTime = Time.time + UnityEngine.Random.Range(0.5f, 1.0f);
+                    return BTNodeStatus.Success;
+                }),
+                new ParallelNode(1, 2,
+                    new ConditionNode(() => bb.IsTargetAttacking || Time.time >= bb.ManeuverEndTime || bb.DistanceToTarget >= attackDistance),
+                    new ActionNode(() => { ActionMoveBack(); return BTNodeStatus.Running; })
                 )
             )
         );
