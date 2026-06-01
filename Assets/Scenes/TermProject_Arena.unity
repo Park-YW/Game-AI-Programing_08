@@ -2888,6 +2888,15 @@ MonoBehaviour:
   actionController: {fileID: 1475817619}
   cooldownSystem: {fileID: 1475817620}
   episodeManager: {fileID: 1357766174}
+  damageTakenPenalty: -0.5
+  damageDealtReward: 0.5
+  threatResponseEvadeGuardReward: 0.02
+  counterAttackReward: 0.05
+  rollCatchReward: 0.05
+  pressureManeuverReward: 0.01
+  pressureFleePenalty: -0.01
+  deathPenalty: -1
+  killReward: 1
 --- !u!114 &1475817626
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4039,7 +4048,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3707628258670134852, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
       propertyPath: dodgeImpulse
-      value: 0
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 5963434143807491845, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
       propertyPath: m_Enabled
@@ -4055,6 +4064,15 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 1895096263345252756, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6082262751175829142}
+    - targetCorrespondingSourceObject: {fileID: 1895096263345252756, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6082262751175829151}
+    - targetCorrespondingSourceObject: {fileID: 1895096263345252756, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6082262751175829150}
+    - targetCorrespondingSourceObject: {fileID: 1895096263345252756, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6082262751175829149}
   m_SourcePrefab: {fileID: 100100000, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
 --- !u!114 &6082262751175829137 stripped
 MonoBehaviour:
@@ -4096,7 +4114,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1248652007}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 85b8a997810d8374096277dc8f18c824, type: 3}
   m_Name: 
@@ -4112,6 +4130,82 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1227068919629312814, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
   m_PrefabInstance: {fileID: 6082262751175829136}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &6082262751175829149
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1248652007}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 66dd8e3509670364894efe2da5121fbd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  agentParameters:
+    maxStep: 0
+  hasUpgradedFromAgentParameters: 1
+  MaxStep: 0
+  self: {fileID: 6082262751175829137}
+  opponent: {fileID: 1048873681}
+  actionController: {fileID: 6082262751175829138}
+  cooldownSystem: {fileID: 6082262751175829141}
+  episodeManager: {fileID: 1357766174}
+  damageTakenPenalty: -0.2
+  damageDealtReward: 0.2
+  threatResponseEvadeGuardReward: 0.05
+  counterAttackReward: 0.1
+  rollCatchReward: 0.1
+  pressureManeuverReward: 0.001
+  pressureFleePenalty: -0.001
+  deathPenalty: -1
+  killReward: 1
+--- !u!114 &6082262751175829150
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1248652007}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a5c9d521e5ef4759a8246a07d52221e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  DecisionPeriod: 1
+  DecisionStep: 0
+  TakeActionsBetweenDecisions: 1
+--- !u!114 &6082262751175829151
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1248652007}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d1c4e0b1822b495aa52bc52839ecb30, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_BrainParameters:
+    VectorObservationSize: 19
+    NumStackedVectorObservations: 1
+    m_ActionSpec:
+      m_NumContinuousActions: 0
+      BranchSizes: 0700000004000000
+    VectorActionSize: 0700000004000000
+    VectorActionDescriptions: []
+    VectorActionSpaceType: 0
+    hasUpgradedBrainParametersWithActionSpec: 1
+  m_Model: {fileID: 0}
+  m_InferenceDevice: 0
+  m_BehaviorType: 0
+  m_BehaviorName: CombatAgent
+  TeamId: 0
+  m_UseChildSensors: 1
+  m_UseChildActuators: 1
+  m_DeterministicInference: 0
+  m_ObservableAttributeHandling: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
