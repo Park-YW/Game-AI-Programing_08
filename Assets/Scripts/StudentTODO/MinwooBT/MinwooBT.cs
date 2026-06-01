@@ -45,9 +45,9 @@ public class MinwooBTStrategy : MonoBehaviour
         public float TargetGuardStartTime = 0f;      // 적이 방어를 시작한 시간
 
         // 적의 예상 공격 쿨타임
-        public float EstimatedAttackCooldown = 1.5f;
+        public float EstimatedAttackCooldown = 2.0f;
         public float EstimatedEvadeCooldown = 2.0f;
-        public float EstimatedGuardCooldown = 2.5f;
+        public float EstimatedGuardCooldown = 2.0f;
 
         // 계산한 적의 쿨타임 종료 시점
         public float TargetAttackVulnerableUntil;
@@ -98,17 +98,17 @@ public class MinwooBTStrategy : MonoBehaviour
             bb.IsTargetGuarding = target.ActionController != null && target.ActionController.IsBlocking;
             bb.DistanceToTarget = GetHorizontalOffsetToTarget().magnitude;
 
-            if (!bb.IsTargetAttacking && bb.WasTargetAttacking)
+            if (bb.IsTargetAttacking && !bb.WasTargetAttacking)
             {
                 bb.TargetAttackVulnerableUntil = Time.time + bb.EstimatedAttackCooldown;
             }
 
-            if (!bb.IsTargetEvading && bb.WasTargetEvading)
+            if (bb.IsTargetEvading && !bb.WasTargetEvading)
             {
                 bb.TargetEvadeVulnerableUntil = Time.time + bb.EstimatedEvadeCooldown;
             }
 
-            if (!bb.IsTargetGuarding && bb.WasTargetGuarding)
+            if (bb.IsTargetGuarding && !bb.WasTargetGuarding)
             {
                 bb.TargetGuardVulnerableUntil = Time.time + bb.EstimatedEvadeCooldown;
             }
@@ -175,8 +175,8 @@ public class MinwooBTStrategy : MonoBehaviour
                 ),
                 new SequenceNode(
                     new ConditionNode(() =>
-                    {
-                        if(bb.TargetAttackVulnerableUntil - Time.time > 0.5f)
+                    { 
+                        if(bb.TargetAttackVulnerableUntil - Time.time > 1.54f)
                         {
                             return true; // 공격이 곧 끝날 것 같으면 회피하지 않도록
                         }
