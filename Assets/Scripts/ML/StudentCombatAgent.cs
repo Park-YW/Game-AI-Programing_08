@@ -30,8 +30,14 @@ public class StudentCombatAgent : Agent
     [SerializeField] private float rollCatchReward = 0.1f;                     // 회피 캐치
     [SerializeField] private float pressureManeuverReward = 0.001f;            // 체력이 낮을 때 압박 기동
     [SerializeField] private float pressureFleePenalty = -0.001f;              // 체력이 낮을 때 도망치면 패널티
+    [SerializeField] private float whiffPenalty = -0.05f;                      // 헛스윙 패널티
 
-    [Header("Episode End Rewards")]
+    [Header("Distance Maintenance Rewards")]
+    [SerializeField] private float outOfRangePenalty = -0.001f;     // 적정 거리를 벗어났을 때 패널티
+    [SerializeField] private float optimalDistanceReward = 0.001f;  // 적정 거리(1.8 ~ 3.5) 유지 보상
+
+    [Header("Episode Rewards")]
+    [SerializeField] private float stepPenalty = -0.0005f;
     [SerializeField] private float deathPenalty = -1.0f;
     [SerializeField] private float killReward = 1.0f;
 
@@ -67,6 +73,10 @@ public class StudentCombatAgent : Agent
     private float previousSelfHealthRatio;
     private float previousOpponentHealthRatio;
 
+    // 공격 확인 변수
+    private bool wasAttackingLastStep;
+    private bool dealtDamageDuringCurrentAttack;
+
     public override void Initialize()
     {
         FillDefaultReferences();
@@ -99,6 +109,9 @@ public class StudentCombatAgent : Agent
         wasOpponentEvadingLastStep = false;
         hasRewardedForCurrentRollCatch = false;
         counterWindowEndTime = 0f;
+
+        wasAttackingLastStep = false;
+        dealtDamageDuringCurrentAttack = false;
     }
 
     public override void CollectObservations(VectorSensor sensor)
@@ -215,6 +228,35 @@ public class StudentCombatAgent : Agent
         bool isOppInEvadeCooldown = Time.time < targetEvadeVulnerableUntil;
         float distanceToOpponent = Vector3.Distance(transform.position, opponent.transform.position);
 
+        AddReward(stepPenalty);
+
+        // =========================================================
+        // [0] 헛스윙 (Whiff) 판정 추론
+        // =========================================================
+        bool isSelfAttacking = actionController.IsAttacking;
+
+        // 1. 내 공격 시작 시점 (Rising Edge)
+        if (isSelfAttacking && !wasAttackingLastStep)
+        {
+            dealtDamageDuringCurrentAttack = false;
+        }
+
+        // 2. 내 공격 애니메이션 진행 중 타격 성공 여부 추적
+        if (isSelfAttacking)
+        {
+            if (dealtDamageThisFrame) dealtDamageDuringCurrentAttack = true;
+        }
+
+        // 3. 내 공격 종료 시점 (Falling Edge) - 헛스윙 판정
+        if (!isSelfAttacking && wasAttackingLastStep)
+        {
+            // 공격 모션이 끝났는데 데미지를 한 번도 못 입혔다면 헛스윙
+            if (!dealtDamageDuringCurrentAttack)
+            {
+                AddReward(whiffPenalty);
+            }
+        }
+
         // =========================================================
         // [1] 위협 대응 및 카운터 어택 추론
         // =========================================================
@@ -290,6 +332,49 @@ public class StudentCombatAgent : Agent
                 else if (dotForward < -0.5f) AddReward(pressureFleePenalty);
             }
         }
+        // =========================================================
+        // [3.5] 거리 유지 기동 (Distance Maintenance)
+        // =========================================================
+        // 적 체력이 30%를 초과할 때(처형/압박 페이즈가 아닐 때) 행동 불능 상태가 아니라면 적용
+        if (currentOppHealth > 0.3f && !actionController.IsBusy)
+        {
+            // BT의 설정값: attackDistance = 1.8f, maintainDistance = 3.5f
+            if (distanceToOpponent < 1.8f)
+            {
+                // 너무 가깝지만 내가 공격 중이 아니라면 뒤로 물러나도록 패널티
+                if (!isSelfAttacking && !actionController.IsBlocking)
+                {
+                    AddReward(outOfRangePenalty);
+                }
+            }
+            else if (distanceToOpponent > 3.5f)
+            {
+                // 거리가 너무 멀면 다가가도록 패널티
+                AddReward(outOfRangePenalty);
+            }
+            else
+            {
+                // 1.8 ~ 3.5 사이의 적정 거리를 유지하며 견제 중일 때 지속적인 소폭 보상
+                AddReward(optimalDistanceReward);
+            }
+        }
+
+        // =========================================================
+        // [4] 에피소드 종료 판정
+        // =========================================================
+        bool justDied = self.IsDead && previousSelfHealthRatio > 0f;
+        bool oppJustDied = opponent.IsDead && previousOpponentHealthRatio > 0f;
+
+        if (justDied)
+        {
+            AddReward(deathPenalty);
+            EndEpisode();
+        }
+        else if (oppJustDied)
+        {
+            AddReward(killReward);
+            EndEpisode();
+        }
 
         // =========================================================
         // 상태 갱신 (반드시 조건 판정이 끝난 마지막에 수행)
@@ -300,19 +385,7 @@ public class StudentCombatAgent : Agent
         wasOpponentAttackingLastStep = isOppAttacking;
         wasOpponentEvadingLastStep = isOppEvading;
 
-        // =========================================================
-        // [4] 에피소드 종료 판정
-        // =========================================================
-        if (self.IsDead)
-        {
-            AddReward(deathPenalty);
-            EndEpisode();
-        }
-        else if (opponent.IsDead)
-        {
-            AddReward(killReward);
-            EndEpisode();
-        }
+        wasAttackingLastStep = isSelfAttacking;
     }
 
     private void FillDefaultReferences()

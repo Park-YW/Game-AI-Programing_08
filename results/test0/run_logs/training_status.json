@@ -1,0 +1,29 @@
+{
+    "CombatAgent": {
+        "checkpoints": [
+            {
+                "steps": 5250,
+                "file_path": "results\\test0\\CombatAgent\\CombatAgent-5250.onnx",
+                "reward": -1.006000000461936,
+                "creation_time": 1780334210.9223824,
+                "auxillary_file_paths": [
+                    "results\\test0\\CombatAgent\\CombatAgent-5250.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 5250,
+            "file_path": "results\\test0\\CombatAgent.onnx",
+            "reward": -1.006000000461936,
+            "creation_time": 1780334210.9223824,
+            "auxillary_file_paths": [
+                "results\\test0\\CombatAgent\\CombatAgent-5250.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "1.1.0",
+        "torch_version": "2.8.0+cpu"
+    }
+}
