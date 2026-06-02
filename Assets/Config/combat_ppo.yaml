@@ -11,7 +11,7 @@ behaviors:
       num_epoch: 3
       learning_rate_schedule: linear
     network_settings:
-      normalize: false
+      normalize: true
       hidden_units: 128
       num_layers: 2
     reward_signals:
@@ -20,5 +20,5 @@ behaviors:
         strength: 1.0
     max_steps: 500000
     time_horizon: 64
-    summary_freq: 10000
-    checkpoint_interval: 50000
+    summary_freq: 100000
+    checkpoint_interval: 100000
