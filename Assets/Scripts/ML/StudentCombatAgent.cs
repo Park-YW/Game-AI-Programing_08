@@ -66,8 +66,8 @@ public class StudentCombatAgent : Agent
     private float targetGuardVulnerableUntil;
 
     // 쿨타임 예상치 상수
-    private const float estimatedAttackCooldown = 1.5f;
-    private const float estimatedEvadeCooldown = 2.0f;
+    private const float estimatedAttackCooldown = 2.5f;
+    private const float estimatedEvadeCooldown = 5.0f;
     private const float estimatedGuardCooldown = 2.5f;
 
     // 체력 변화 계산용 변수
@@ -410,7 +410,7 @@ public class StudentCombatAgent : Agent
             // 내가 졌을 때: 상대방 체력이 많이 남았을수록 더 큰 페널티를 받음
             // 예: 상대 체력 100% 남기고 지면 -2.0 / 상대 체력 10% 남기고 지면 -1.1
             float additionalPenalty = opponent.CurrentHealthRatio;
-            AddReward(deathPenalty - additionalPenalty);
+            AddReward(deathPenalty);// - additionalPenalty);
             EndEpisode();
         }
         else if (oppJustDied)
@@ -418,7 +418,7 @@ public class StudentCombatAgent : Agent
             // 내가 이겼을 때: 내 체력이 많이 남았을수록 더 큰 잭팟을 터트림
             // 예: 내 체력 100% 남기고 이기면 +2.0 / 내 체력 10% 남기고 이기면 +1.1
             float healthBonus = self.CurrentHealthRatio;
-            AddReward(killReward + healthBonus);
+            AddReward(killReward);// + healthBonus);
             EndEpisode();
         }
 
