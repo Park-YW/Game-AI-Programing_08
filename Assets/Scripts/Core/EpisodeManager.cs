@@ -14,6 +14,7 @@ public class EpisodeManager : MonoBehaviour
     private bool episodeDone;
     private float episodeStartTime;
     private Coroutine delayedResetRoutine;
+    private bool mlTimeoutEndPending;
 
     private void Awake()
     {
@@ -44,6 +45,7 @@ public class EpisodeManager : MonoBehaviour
         }
 
         episodeDone = false;
+        mlTimeoutEndPending = false;
         episodeStartTime = Time.time;
 
         ResetAgent(agentA, spawnPointA);
@@ -94,9 +96,29 @@ public class EpisodeManager : MonoBehaviour
         return episodeDone;
     }
 
+    /// <summary>
+    /// Returns true once when a timeout draw ends the combat episode.
+    /// StudentCombatAgent should call EndEpisode() when this is consumed.
+    /// </summary>
+    public bool TryConsumeMlTimeoutEnd()
+    {
+        if (!mlTimeoutEndPending)
+        {
+            return false;
+        }
+
+        mlTimeoutEndPending = false;
+        return true;
+    }
+
     private void EndEpisode(string result)
     {
         episodeDone = true;
+        if (result == "timeout draw")
+        {
+            mlTimeoutEndPending = true;
+        }
+
         Debug.Log($"Episode ended: {result}.");
 
         if (delayedResetRoutine == null)

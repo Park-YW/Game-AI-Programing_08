@@ -81,6 +81,20 @@ public class CombatActionController : MonoBehaviour
         lastMoveFrame = Time.frameCount;
     }
 
+    /// <summary>
+    /// Moves without rotating. RL agents should call Face() toward the opponent separately.
+    /// </summary>
+    public void MoveWithoutFacing(Vector3 direction)
+    {
+        if (!TryGetMoveDirection(direction, out Vector3 horizontalDirection))
+        {
+            return;
+        }
+
+        body.MovePosition(body.position + horizontalDirection * moveSpeed * Time.deltaTime);
+        lastMoveFrame = Time.frameCount;
+    }
+
     public void Face(Vector3 direction)
     {
         if (!CanAct() || IsBusy)
