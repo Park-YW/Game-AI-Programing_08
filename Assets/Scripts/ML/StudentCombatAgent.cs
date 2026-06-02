@@ -26,6 +26,7 @@ public class StudentCombatAgent : Agent
 
     [Header("MinwooBT-Specific Rewards")]
     [SerializeField] private float threatResponseEvadeGuardReward = 0.05f;     // 공격 대응 (방어/회피)
+    [SerializeField] private float whiffGuardPenalty = -0.05f;                 // 헛가드
     [SerializeField] private float counterAttackReward = 0.1f;                 // 방어/회피 후 반격
     [SerializeField] private float rollCatchReward = 0.1f;                     // 회피 캐치
     [SerializeField] private float pressureManeuverReward = 0.001f;            // 체력이 낮을 때 압박 기동
@@ -77,6 +78,10 @@ public class StudentCombatAgent : Agent
     private bool wasAttackingLastStep;
     private bool dealtDamageDuringCurrentAttack;
 
+    // 가드 확인 변수
+    private bool wasGuardingLastStep;
+    private bool threatDetectedDuringCurrentGuard;
+
     public override void Initialize()
     {
         FillDefaultReferences();
@@ -112,6 +117,9 @@ public class StudentCombatAgent : Agent
 
         wasAttackingLastStep = false;
         dealtDamageDuringCurrentAttack = false;
+
+        wasGuardingLastStep = false;
+        threatDetectedDuringCurrentGuard = false;
     }
 
     public override void CollectObservations(VectorSensor sensor)
@@ -128,7 +136,7 @@ public class StudentCombatAgent : Agent
         sensor.AddObservation(cooldownSystem.IsAttackReady() ? 1f : 0f);
         sensor.AddObservation(cooldownSystem.IsBlockReady() ? 1f : 0f);
         sensor.AddObservation(cooldownSystem.IsDodgeReady() ? 1f : 0f);
-
+            
         // 2. 상대 상태 관측 (9개)
         sensor.AddObservation(opponent.CurrentHealthRatio);
 
@@ -258,6 +266,38 @@ public class StudentCombatAgent : Agent
         }
 
         // =========================================================
+        // [0.5] 헛가드 (Whiff Guard) 판정 추론
+        // =========================================================
+        bool isSelfGuarding = actionController.IsBlocking;
+
+        // 1. 내 가드 시작 시점 (Rising Edge)
+        if (isSelfGuarding && !wasGuardingLastStep)
+        {
+            // 가드를 올리는 순간, 아직 위협은 없다고 초기화
+            threatDetectedDuringCurrentGuard = false;
+        }
+
+        // 2. 내 가드 애니메이션 진행 중 위협 감지
+        if (isSelfGuarding)
+        {
+            // 내가 가드를 올리고 있는 동안, 적이 공격 모션 중이고 사거리 내에 있다면 '유효한 가드'로 인정
+            if (isOppAttacking && distanceToOpponent <= 3.5f)
+            {
+                threatDetectedDuringCurrentGuard = true;
+            }
+        }
+
+        // 3. 내 가드 종료 시점 (Falling Edge) - 헛가드 판정
+        if (!isSelfGuarding && wasGuardingLastStep)
+        {
+            // 가드를 내렸는데, 가드를 올리고 있던 내내 적의 유의미한 공격(위협)이 전혀 없었다면 헛가드!
+            if (!threatDetectedDuringCurrentGuard)
+            {
+                AddReward(whiffGuardPenalty);
+            }
+        }
+
+        // =========================================================
         // [1] 위협 대응 및 카운터 어택 추론
         // =========================================================
 
@@ -281,7 +321,7 @@ public class StudentCombatAgent : Agent
             // 방어를 시도했고 모션 내내 데미지를 입지 않았을 경우 성공
             if (attemptedDefenseDuringOpponentAttack && !tookDamageDuringOpponentAttack)
             {
-                if (distanceToOpponent <= 3.0f) // 허공 가드 방지용 거리 조건
+                if (distanceToOpponent <= 2.0f) // 허공 가드 방지용 거리 조건
                 {
                     AddReward(threatResponseEvadeGuardReward);
                     counterWindowEndTime = Time.time + 1.5f; // 카운터 기회 제공
@@ -367,12 +407,18 @@ public class StudentCombatAgent : Agent
 
         if (justDied)
         {
-            AddReward(deathPenalty);
+            // 내가 졌을 때: 상대방 체력이 많이 남았을수록 더 큰 페널티를 받음
+            // 예: 상대 체력 100% 남기고 지면 -2.0 / 상대 체력 10% 남기고 지면 -1.1
+            float additionalPenalty = opponent.CurrentHealthRatio;
+            AddReward(deathPenalty - additionalPenalty);
             EndEpisode();
         }
         else if (oppJustDied)
         {
-            AddReward(killReward);
+            // 내가 이겼을 때: 내 체력이 많이 남았을수록 더 큰 잭팟을 터트림
+            // 예: 내 체력 100% 남기고 이기면 +2.0 / 내 체력 10% 남기고 이기면 +1.1
+            float healthBonus = self.CurrentHealthRatio;
+            AddReward(killReward + healthBonus);
             EndEpisode();
         }
 
@@ -386,6 +432,9 @@ public class StudentCombatAgent : Agent
         wasOpponentEvadingLastStep = isOppEvading;
 
         wasAttackingLastStep = isSelfAttacking;
+
+        wasAttackingLastStep = isSelfAttacking;
+        wasGuardingLastStep = isSelfGuarding;
     }
 
     private void FillDefaultReferences()
