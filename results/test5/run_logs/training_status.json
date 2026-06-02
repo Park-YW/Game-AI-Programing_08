@@ -2,58 +2,58 @@
     "CombatAgent": {
         "checkpoints": [
             {
-                "steps": 3799851,
-                "file_path": "results\\test5\\CombatAgent\\CombatAgent-3799851.onnx",
-                "reward": -1.977250151336193,
-                "creation_time": 1780360752.5020247,
+                "steps": 4849995,
+                "file_path": "results\\test5\\CombatAgent\\CombatAgent-4849995.onnx",
+                "reward": null,
+                "creation_time": 1780364218.9139135,
                 "auxillary_file_paths": [
-                    "results\\test5\\CombatAgent\\CombatAgent-3799851.pt"
+                    "results\\test5\\CombatAgent\\CombatAgent-4849995.pt"
                 ]
             },
             {
-                "steps": 3849889,
-                "file_path": "results\\test5\\CombatAgent\\CombatAgent-3849889.onnx",
-                "reward": -2.8754502832889557,
-                "creation_time": 1780360913.1966584,
+                "steps": 4899911,
+                "file_path": "results\\test5\\CombatAgent\\CombatAgent-4899911.onnx",
+                "reward": null,
+                "creation_time": 1780364380.9188771,
                 "auxillary_file_paths": [
-                    "results\\test5\\CombatAgent\\CombatAgent-3849889.pt"
+                    "results\\test5\\CombatAgent\\CombatAgent-4899911.pt"
                 ]
             },
             {
-                "steps": 3899822,
-                "file_path": "results\\test5\\CombatAgent\\CombatAgent-3899822.onnx",
-                "reward": -3.184749908745289,
-                "creation_time": 1780361073.5554168,
+                "steps": 4949926,
+                "file_path": "results\\test5\\CombatAgent\\CombatAgent-4949926.onnx",
+                "reward": 2.3424496948719025,
+                "creation_time": 1780364549.8573954,
                 "auxillary_file_paths": [
-                    "results\\test5\\CombatAgent\\CombatAgent-3899822.pt"
+                    "results\\test5\\CombatAgent\\CombatAgent-4949926.pt"
                 ]
             },
             {
-                "steps": 3949884,
-                "file_path": "results\\test5\\CombatAgent\\CombatAgent-3949884.onnx",
-                "reward": 1.566100299358368,
-                "creation_time": 1780361236.966034,
+                "steps": 4999909,
+                "file_path": "results\\test5\\CombatAgent\\CombatAgent-4999909.onnx",
+                "reward": 1.023050058633089,
+                "creation_time": 1780364707.9379928,
                 "auxillary_file_paths": [
-                    "results\\test5\\CombatAgent\\CombatAgent-3949884.pt"
+                    "results\\test5\\CombatAgent\\CombatAgent-4999909.pt"
                 ]
             },
             {
-                "steps": 3976107,
-                "file_path": "results\\test5\\CombatAgent\\CombatAgent-3976107.onnx",
-                "reward": 2.695924922823906,
-                "creation_time": 1780361321.8987038,
+                "steps": 5000165,
+                "file_path": "results\\test5\\CombatAgent\\CombatAgent-5000165.onnx",
+                "reward": 1.023050058633089,
+                "creation_time": 1780364707.9914043,
                 "auxillary_file_paths": [
-                    "results\\test5\\CombatAgent\\CombatAgent-3976107.pt"
+                    "results\\test5\\CombatAgent\\CombatAgent-5000165.pt"
                 ]
             }
         ],
         "final_checkpoint": {
-            "steps": 3976107,
+            "steps": 5000165,
             "file_path": "results\\test5\\CombatAgent.onnx",
-            "reward": 2.695924922823906,
-            "creation_time": 1780361321.8987038,
+            "reward": 1.023050058633089,
+            "creation_time": 1780364707.9914043,
             "auxillary_file_paths": [
-                "results\\test5\\CombatAgent\\CombatAgent-3976107.pt"
+                "results\\test5\\CombatAgent\\CombatAgent-5000165.pt"
             ]
         }
     },

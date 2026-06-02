@@ -1,0 +1,65 @@
+{
+    "CombatAgent": {
+        "checkpoints": [
+            {
+                "steps": 899959,
+                "file_path": "results\\test7\\CombatAgent\\CombatAgent-899959.onnx",
+                "reward": 1.6429996413062327,
+                "creation_time": 1780369378.5201752,
+                "auxillary_file_paths": [
+                    "results\\test7\\CombatAgent\\CombatAgent-899959.pt"
+                ]
+            },
+            {
+                "steps": 949987,
+                "file_path": "results\\test7\\CombatAgent\\CombatAgent-949987.onnx",
+                "reward": 0.05021967375651002,
+                "creation_time": 1780369544.8135962,
+                "auxillary_file_paths": [
+                    "results\\test7\\CombatAgent\\CombatAgent-949987.pt"
+                ]
+            },
+            {
+                "steps": 999980,
+                "file_path": "results\\test7\\CombatAgent\\CombatAgent-999980.onnx",
+                "reward": 1.4470749867614359,
+                "creation_time": 1780369714.274015,
+                "auxillary_file_paths": [
+                    "results\\test7\\CombatAgent\\CombatAgent-999980.pt"
+                ]
+            },
+            {
+                "steps": 1049992,
+                "file_path": "results\\test7\\CombatAgent\\CombatAgent-1049992.onnx",
+                "reward": 0.8612297476851382,
+                "creation_time": 1780369882.8603735,
+                "auxillary_file_paths": [
+                    "results\\test7\\CombatAgent\\CombatAgent-1049992.pt"
+                ]
+            },
+            {
+                "steps": 1088689,
+                "file_path": "results\\test7\\CombatAgent\\CombatAgent-1088689.onnx",
+                "reward": -1.1784335818471543,
+                "creation_time": 1780370013.767562,
+                "auxillary_file_paths": [
+                    "results\\test7\\CombatAgent\\CombatAgent-1088689.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 1088689,
+            "file_path": "results\\test7\\CombatAgent.onnx",
+            "reward": -1.1784335818471543,
+            "creation_time": 1780370013.767562,
+            "auxillary_file_paths": [
+                "results\\test7\\CombatAgent\\CombatAgent-1088689.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "1.1.0",
+        "torch_version": "2.8.0+cpu"
+    }
+}
