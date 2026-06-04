@@ -122,13 +122,52 @@ public class StudentCombatAgent : Agent
         threatDetectedDuringCurrentGuard = false;
     }
 
+    public override void WriteDiscreteActionMask(IDiscreteActionMask actionMask)
+    {
+        // 1. 캐릭터가 행동 불능(애니메이션 진행 중) 상태일 때
+        if (actionController.IsBusy)
+        {
+            // 이동 브랜치(Branch 0): 0(가만히 있기)을 제외한 모든 이동 액션 마스킹
+            actionMask.SetActionEnabled(0, 1, false);
+            actionMask.SetActionEnabled(0, 2, false);
+            actionMask.SetActionEnabled(0, 3, false);
+            actionMask.SetActionEnabled(0, 4, false);
+            actionMask.SetActionEnabled(0, 5, false);
+            actionMask.SetActionEnabled(0, 6, false);
+
+            // 전투 브랜치(Branch 1): 0(SkillNone)을 제외한 모든 전투 액션 마스킹
+            actionMask.SetActionEnabled(1, SkillAttack, false);
+            actionMask.SetActionEnabled(1, SkillBlock, false);
+            actionMask.SetActionEnabled(1, SkillDodge, false);
+
+            // 바쁠 때는 쿨타임을 체크할 필요도 없으므로 여기서 종료
+            return;
+        }
+
+        // 2. 캐릭터가 자유로운 상태일 때: 쿨타임이 도는 스킬만 선택지에서 제거
+        if (!cooldownSystem.IsAttackReady())
+        {
+            actionMask.SetActionEnabled(1, SkillAttack, false);
+        }
+
+        if (!cooldownSystem.IsBlockReady())
+        {
+            actionMask.SetActionEnabled(1, SkillBlock, false);
+        }
+
+        if (!cooldownSystem.IsDodgeReady())
+        {
+            actionMask.SetActionEnabled(1, SkillDodge, false);
+        }
+    }
+
     public override void CollectObservations(VectorSensor sensor)
     {
         // 상태 및 타겟 예측 갱신
         UpdatePredictions();
         var opponentAction = opponent.GetComponent<CombatActionController>();
 
-        // 1. 내 상태 관측 (7개)
+        // 1. 내 상태 관측 (7개) + 3개
         sensor.AddObservation(self.CurrentHealthRatio);
         sensor.AddObservation(actionController.IsAttacking ? 1f : 0f);
         sensor.AddObservation(actionController.IsBlocking ? 1f : 0f);
@@ -136,7 +175,10 @@ public class StudentCombatAgent : Agent
         sensor.AddObservation(cooldownSystem.IsAttackReady() ? 1f : 0f);
         sensor.AddObservation(cooldownSystem.IsBlockReady() ? 1f : 0f);
         sensor.AddObservation(cooldownSystem.IsDodgeReady() ? 1f : 0f);
-            
+        sensor.AddObservation(cooldownSystem.GetAttackCooldownRatio());
+        sensor.AddObservation(cooldownSystem.GetBlockCooldownRatio());
+        sensor.AddObservation(cooldownSystem.GetDodgeCooldownRatio());
+
         // 2. 상대 상태 관측 (9개)
         sensor.AddObservation(opponent.CurrentHealthRatio);
 
