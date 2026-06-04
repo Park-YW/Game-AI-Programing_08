@@ -1,0 +1,29 @@
+{
+    "CombatAgent": {
+        "checkpoints": [
+            {
+                "steps": 11686,
+                "file_path": "results\\star_rl6\\CombatAgent\\CombatAgent-11686.onnx",
+                "reward": -5.284920739453463,
+                "creation_time": 1780510216.266125,
+                "auxillary_file_paths": [
+                    "results\\star_rl6\\CombatAgent\\CombatAgent-11686.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 11686,
+            "file_path": "results\\star_rl6\\CombatAgent.onnx",
+            "reward": -5.284920739453463,
+            "creation_time": 1780510216.266125,
+            "auxillary_file_paths": [
+                "results\\star_rl6\\CombatAgent\\CombatAgent-11686.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "1.1.0",
+        "torch_version": "2.8.0+cpu"
+    }
+}

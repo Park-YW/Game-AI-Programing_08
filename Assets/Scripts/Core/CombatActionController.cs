@@ -109,6 +109,10 @@ public class CombatActionController : MonoBehaviour
         IsAttacking = true;
         attackHitResolved = false;
         LockRotation(transform.forward);
+
+        // 공격 횟수 카운팅
+        EpisodeManager.Instance?.LogAttack(name);
+
         if (!ShouldSuppressCombatDebug())
         {
             Debug.Log($"{name} started attack.");
@@ -131,6 +135,10 @@ public class CombatActionController : MonoBehaviour
 
         LockRotation(facingDirection);
         cooldownSystem.TriggerBlockCooldown();
+
+        // 방어 횟수 카운팅
+        EpisodeManager.Instance?.LogBlock(name);
+
         blockRoutine = StartCoroutine(BlockRoutine());
     }
 
@@ -159,6 +167,10 @@ public class CombatActionController : MonoBehaviour
 
         dodgeDirection.Normalize();
         cooldownSystem.TriggerDodgeCooldown();
+
+        // 회피 횟수 카운팅
+        EpisodeManager.Instance?.LogDodge(name);
+
         dodgeRoutine = StartCoroutine(DodgeRoutine(dodgeDirection));
     }
 
@@ -183,7 +195,18 @@ public class CombatActionController : MonoBehaviour
         }
 
         attackHitResolved = true;
-        hitDetector?.TryHit();
+
+        // 공격 결과 카운팅
+        CombatHitResult result = hitDetector?.TryHit() ?? CombatHitResult.NoTarget;
+        switch (result)
+        {
+            case CombatHitResult.Hit:
+                EpisodeManager.Instance?.LogHit(name);
+                break;
+            case CombatHitResult.Blocked:
+                EpisodeManager.Instance?.LogBlocked(name);
+                break;
+        }
     }
 
     public void OnAttackEnd()

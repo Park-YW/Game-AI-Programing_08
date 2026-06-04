@@ -1,0 +1,42 @@
+{
+    "name": "root",
+    "metadata": {
+        "timer_format_version": "0.1.0",
+        "start_time_seconds": "1780509824",
+        "python_version": "3.10.12 | packaged by Anaconda, Inc. | (main, Jul  5 2023, 19:01:18) [MSC v.1916 64 bit (AMD64)]",
+        "command_line_arguments": "C:\\Users\\annst\\anaconda3\\envs\\mlagents\\Scripts\\mlagents-learn Assets\\Config\\combat_ppo.yaml --run-id=star_rl5",
+        "mlagents_version": "1.1.0",
+        "mlagents_envs_version": "1.1.0",
+        "communication_protocol_version": "1.5.0",
+        "pytorch_version": "2.8.0+cpu",
+        "numpy_version": "1.23.5",
+        "end_time_seconds": "1780509899"
+    },
+    "total": 74.69898990006186,
+    "count": 1,
+    "self": 0.01282660011202097,
+    "children": {
+        "run_training.setup": {
+            "total": 0.09978619997855276,
+            "count": 1,
+            "self": 0.09978619997855276
+        },
+        "TrainerController.start_learning": {
+            "total": 74.58637709997129,
+            "count": 1,
+            "self": 0.0001328998478129506,
+            "children": {
+                "TrainerController._reset_env": {
+                    "total": 74.58622000005562,
+                    "count": 1,
+                    "self": 74.58622000005562
+                },
+                "TrainerController._save_models": {
+                    "total": 2.420006785541773e-05,
+                    "count": 1,
+                    "self": 2.420006785541773e-05
+                }
+            }
+        }
+    }
+}
