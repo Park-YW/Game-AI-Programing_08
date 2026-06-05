@@ -14,15 +14,12 @@ public class StudentCombatAgent : Agent
     public CooldownSystem cooldownSystem;
     public EpisodeManager episodeManager;
 
-    // ■ PDF 25p 가이드라인 지정 이산형 액션 맵 상수 설정
-    // Branch 0: 동서남북 이동 제어 (Size 5)
     private const int MoveNone = 0;
     private const int MoveForward = 1;
     private const int MoveBackward = 2;
     private const int MoveLeft = 3;
     private const int MoveRight = 4;
 
-    // Branch 1: 전투 행동 제어 (Size 4)
     private const int SkillNone = 0;
     private const int SkillAttack = 1;
     private const int SkillBlock = 2;
@@ -30,6 +27,7 @@ public class StudentCombatAgent : Agent
 
     private float lastSelfHealth = 1f;
     private float lastOpponentHealth = 1f;
+    private bool isInitialized = false;
 
     public override void Initialize()
     {
@@ -43,10 +41,13 @@ public class StudentCombatAgent : Agent
 
     public override void OnEpisodeBegin()
     {
+        FillDefaultReferences();
+
         if (self != null && opponent != null)
         {
             lastSelfHealth = self.CurrentHealthRatio;
             lastOpponentHealth = opponent.CurrentHealthRatio;
+            isInitialized = true;
         }
     }
 
@@ -54,29 +55,25 @@ public class StudentCombatAgent : Agent
     {
         if (self == null || opponent == null || cooldownSystem == null) return;
 
-        // ■ PDF 24p 가이드라인: 체력, 상대 위치, 거리, 쿨타임 등을 0~1 범위로 정규화하여 수집
-        // [총 11차원 Vector Observation 수집] -> 인스펙터 Space Size = 11 고정
-        sensor.AddObservation(self.CurrentHealthRatio);      // 내 체력 (0~1)
-        sensor.AddObservation(opponent.CurrentHealthRatio);  // 상대 체력 (0~1)
+        sensor.AddObservation(self.CurrentHealthRatio);
+        sensor.AddObservation(opponent.CurrentHealthRatio);
 
         sensor.AddObservation(cooldownSystem.IsAttackReady() ? 1.0f : 0.0f);
         sensor.AddObservation(cooldownSystem.IsBlockReady() ? 1.0f : 0.0f);
         sensor.AddObservation(cooldownSystem.IsDodgeReady() ? 1.0f : 0.0f);
 
-        // 상대적인 방향 벡터 및 거리 정보 정규화 수집
         Vector3 offset = GetHorizontalOffsetToTarget();
         float distance = offset.magnitude;
-        sensor.AddObservation(Mathf.Clamp01(distance / 20.0f)); // 거리 최대 20유닛 기준 정규화
+        sensor.AddObservation(Mathf.Clamp01(distance / 20.0f));
 
         Vector3 dirToTarget = distance <= 0.0001f ? transform.forward : offset.normalized;
-        sensor.AddObservation(dirToTarget.x); // 방향 X (-1~1)
-        sensor.AddObservation(dirToTarget.z); // 방향 Z (-1~1)
+        sensor.AddObservation(dirToTarget.x);
+        sensor.AddObservation(dirToTarget.z);
 
-        // 상대방 수비형 BT의 실시간 액션 상태 파악
         if (opponent.ActionController != null)
         {
             sensor.AddObservation(opponent.ActionController.IsBlocking ? 1.0f : 0.0f);
-            sensor.AddObservation(opponent.ActionController.IsAttacking ? 1.0f : 0.0f);
+            sensor.AddObservation(opponent.ActionController.IsInvincible ? 1.0f : 0.0f);
         }
         else
         {
@@ -91,20 +88,23 @@ public class StudentCombatAgent : Agent
         if (self == null || opponent == null || actionController == null || cooldownSystem == null) return;
         if (self.IsDead) return;
 
-        // ■ PDF 25p: Branch 0과 Branch 1 값을 차례대로 수신
+        if (!isInitialized || lastSelfHealth <= 0.05f || lastOpponentHealth <= 0.05f)
+        {
+            lastSelfHealth = self.CurrentHealthRatio;
+            lastOpponentHealth = opponent.CurrentHealthRatio;
+            isInitialized = true;
+            return;
+        }
+
         int moveCommand = actions.DiscreteActions[0];
         int skillCommand = actions.DiscreteActions[1];
 
         Vector3 dirToTarget = GetDirectionToTarget();
-        Vector3 leftDirection = Vector3.Cross(dirToTarget, Vector3.up).normalized; // 측면 왼쪽
+        Vector3 leftDirection = Vector3.Cross(dirToTarget, Vector3.up).normalized;
         float distance = GetHorizontalOffsetToTarget().magnitude;
 
-        // 상시 타겟 조준 고정
         actionController.Face(dirToTarget);
 
-        // ---------------------------------------------------------------------
-        // [Action 파트] Branch 0 : PDF 25p 규칙 기반 동서남북 기동 변환
-        // ---------------------------------------------------------------------
         if (!actionController.IsBlocking)
         {
             switch (moveCommand)
@@ -131,19 +131,15 @@ public class StudentCombatAgent : Agent
             actionController.Move(Vector3.zero);
         }
 
-        // ---------------------------------------------------------------------
-        // [Action 파트] Branch 1 : 전투 행동 제어
-        // ---------------------------------------------------------------------
         if (skillCommand == SkillAttack && cooldownSystem.IsAttackReady())
         {
-            // [Reward 파트] 가이드라인 기반 보상/패널티 설계
             if (opponent.ActionController != null && opponent.ActionController.IsBlocking)
             {
-                AddReward(-1.5f); // 방패 들이받기 패널티
+                AddReward(-1.5f);
             }
             else if (distance > 2.0f)
             {
-                AddReward(-0.2f); // 허공 칼질 감점
+                AddReward(-0.2f);
             }
             actionController.Attack();
         }
@@ -156,28 +152,35 @@ public class StudentCombatAgent : Agent
             actionController.Dodge(dirToTarget);
         }
 
-        // ---------------------------------------------------------------------
-        // [Reward 파트] 실시간 점수 누적 연산
-        // ---------------------------------------------------------------------
-        if (opponent.CurrentHealthRatio < lastOpponentHealth)
+        if (opponent.CurrentHealthRatio < lastOpponentHealth && lastOpponentHealth > 0.1f)
         {
             float damageDealt = lastOpponentHealth - opponent.CurrentHealthRatio;
-            AddReward(damageDealt * 4.0f); // 타격 성공 양수 보상
+            AddReward(damageDealt * 4.0f);
             lastOpponentHealth = opponent.CurrentHealthRatio;
         }
 
-        if (self.CurrentHealthRatio < lastSelfHealth)
+        if (self.CurrentHealthRatio < lastSelfHealth && lastSelfHealth > 0.1f)
         {
             float damageTaken = lastSelfHealth - self.CurrentHealthRatio;
-            AddReward(-damageTaken * 2.0f); // 피격 음수 보상
+            AddReward(-damageTaken * 2.0f);
             lastSelfHealth = self.CurrentHealthRatio;
         }
 
-        // 대치 유지 유도 보상
-        if (distance <= 2.1f) AddReward(0.01f);
-        else AddReward(-0.002f);
-
-        // 에피소드 종료 조건 판정
+        // ---------------------------------------------------------------------
+        // [강력한 추격 유도 보상 시스템으로 개조]
+        // ---------------------------------------------------------------------
+        if (distance <= 2.0f)
+        {
+            // 공격 유효 사거리 내로 진입 성공 시 매 프레임 파격적인 보상 부여 (가장 중요)
+            AddReward(0.1f);
+        }
+        else
+        {
+            // 거리가 2.0f보다 멀리 떨어져 있으면 상시로 거대한 패널티 부여!
+            // 이 패널티 때문에 AI는 가만히 서 있으면 점수가 계속 파멸적으로 깎이므로, 
+            // 살기 위해서라도 무조건 전진(MoveForward)을 선택해 적에게 접근하게 됩니다.
+            AddReward(-0.05f * distance);
+        }
         if (opponent.IsDead)
         {
             SetReward(5.0f);
@@ -194,21 +197,17 @@ public class StudentCombatAgent : Agent
     {
         var discreteActions = actionsOut.DiscreteActions;
 
-        // 키보드 방향키 조작 매핑 (W, S, A, D)
         if (Input.GetKey(KeyCode.W)) discreteActions[0] = MoveForward;
         else if (Input.GetKey(KeyCode.S)) discreteActions[0] = MoveBackward;
         else if (Input.GetKey(KeyCode.A)) discreteActions[0] = MoveLeft;
         else if (Input.GetKey(KeyCode.D)) discreteActions[0] = MoveRight;
         else discreteActions[0] = MoveNone;
 
-        // 마우스 클릭 및 키 조작 매핑 (J, K, L)
         if (Input.GetKey(KeyCode.J)) discreteActions[1] = SkillAttack;
         else if (Input.GetKey(KeyCode.K)) discreteActions[1] = SkillBlock;
         else if (Input.GetKey(KeyCode.L)) discreteActions[1] = SkillDodge;
         else discreteActions[1] = SkillNone;
     }
-
-    #region 벡터 연산 헬퍼 함수
 
     private Vector3 GetDirectionToTarget()
     {
@@ -224,13 +223,25 @@ public class StudentCombatAgent : Agent
         return offset;
     }
 
-    #endregion
-
     private void FillDefaultReferences()
     {
         if (self == null) self = GetComponent<CombatCharacter>();
         if (actionController == null) actionController = GetComponent<CombatActionController>();
         if (cooldownSystem == null) cooldownSystem = GetComponent<CooldownSystem>();
+
+        if (opponent == null)
+        {
+            CombatCharacter[] characters = FindObjectsByType<CombatCharacter>(FindObjectsSortMode.None);
+            foreach (var ch in characters)
+            {
+                if (ch.gameObject != this.gameObject)
+                {
+                    opponent = ch;
+                    break;
+                }
+            }
+        }
+
         if (episodeManager == null) episodeManager = FindFirstObjectByType<EpisodeManager>();
     }
 }

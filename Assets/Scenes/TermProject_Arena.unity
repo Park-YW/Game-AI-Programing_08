@@ -1665,9 +1665,6 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 523944886092325560, guid: dec38366c2ca5144d8418b1b8b8f810d, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2070363664}
-    - targetCorrespondingSourceObject: {fileID: 523944886092325560, guid: dec38366c2ca5144d8418b1b8b8f810d, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 2070363671}
     - targetCorrespondingSourceObject: {fileID: 523944886092325560, guid: dec38366c2ca5144d8418b1b8b8f810d, type: 3}
       insertIndex: -1
@@ -3173,25 +3170,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 429d31146bce7d74f9b8f291bfc02bf4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &2070363664
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2070363657}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1ef6aed4a66dc2a4e81e9074daa8a6b9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  self: {fileID: 1048873681}
-  target: {fileID: 6082262751175829137}
-  actionController: {fileID: 2070363659}
-  cooldownSystem: {fileID: 2070363658}
-  attackDistance: 1.8
-  facingAngle: 45
-  lowHealthRatio: 0.35
 --- !u!114 &2070363669
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3440,10 +3418,7 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 1895096263345252756, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 6082262751175829147}
-    - targetCorrespondingSourceObject: {fileID: 1895096263345252756, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 6082262751175829154}
+      addedObject: {fileID: 6082262751175829155}
   m_SourcePrefab: {fileID: 100100000, guid: aa8891f58e1f068428f4a0a6b7c805c3, type: 3}
 --- !u!114 &6082262751175829137 stripped
 MonoBehaviour:
@@ -3478,26 +3453,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: deab751ebe2394c44bd0f7a18dd2977a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &6082262751175829147
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 912988306}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 961c44ca5da0c8e44b18d7785e377586, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  self: {fileID: 6082262751175829137}
-  target: {fileID: 1048873681}
-  actionController: {fileID: 6082262751175829138}
-  cooldownSystem: {fileID: 6082262751175829141}
-  closeDistance: 2
-  preferredDistance: 3
-  lowHealthRatio: 0.3
---- !u!114 &6082262751175829154
+--- !u!114 &6082262751175829155
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -3506,16 +3462,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 912988306}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a07cf5ef327044d4db7bd0b354f2a6e7, type: 3}
+  m_Script: {fileID: 11500000, guid: 60d726156a5fb7945a78aacc97f118ef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   self: {fileID: 6082262751175829137}
   target: {fileID: 1048873681}
   actionController: {fileID: 6082262751175829138}
   cooldownSystem: {fileID: 6082262751175829141}
-  closeDistance: 2
-  preferredDistance: 3
-  lowHealthRatio: 0.3
+  attackDistance: 1.8
+  maintainDistance: 3.5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
