@@ -300,12 +300,10 @@ MonoBehaviour:
   damageTakenPenalty: -0.5
   damageDealtReward: 0.5
   threatResponseEvadeGuardReward: 0.02
-  whiffGuardPenalty: -0.05
   counterAttackReward: 0.05
   rollCatchReward: 0.05
   pressureManeuverReward: 0.01
   pressureFleePenalty: -0.01
-  whiffPenalty: -0.05
   outOfRangePenalty: -0.001
   optimalDistanceReward: 0.001
   stepPenalty: -0.0005
@@ -2395,7 +2393,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_BrainParameters:
-    VectorObservationSize: 22
+    VectorObservationSize: 19
     NumStackedVectorObservations: 1
     m_ActionSpec:
       m_NumContinuousActions: 0
@@ -2404,7 +2402,7 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 0
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 5022602860645237092, guid: e87da1d6665532347928f75387b878c9, type: 3}
+  m_Model: {fileID: 5022602860645237092, guid: 9bab5f338e45a224892072f70c4ddc31, type: 3}
   m_InferenceDevice: 0
   m_BehaviorType: 2
   m_BehaviorName: CombatAgent
@@ -2449,19 +2447,17 @@ MonoBehaviour:
   actionController: {fileID: 977128778657009920}
   cooldownSystem: {fileID: 3746273004482511434}
   episodeManager: {fileID: 4720158148072322850}
-  damageTakenPenalty: -0.125
+  damageTakenPenalty: -0.2
   damageDealtReward: 0.1
-  threatResponseEvadeGuardReward: 0.025
-  whiffGuardPenalty: -0.05
-  counterAttackReward: 0.025
-  rollCatchReward: 0.01
-  pressureManeuverReward: 0
+  threatResponseEvadeGuardReward: 0.1
+  counterAttackReward: 0.1
+  rollCatchReward: 0.2
+  pressureManeuverReward: 0.0001
   pressureFleePenalty: -0.0001
-  whiffPenalty: -0.01
   outOfRangePenalty: -0.0001
   optimalDistanceReward: 0.0002
   stepPenalty: -0.00001
-  deathPenalty: -0.8
+  deathPenalty: -1
   killReward: 1
 --- !u!4 &3457706361922462826 stripped
 Transform:

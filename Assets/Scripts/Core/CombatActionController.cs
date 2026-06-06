@@ -17,6 +17,10 @@ public class CombatActionController : MonoBehaviour
     [SerializeField] private CombatHitDetector hitDetector;
     [SerializeField] private CombatAnimatorDriver animatorDriver;
 
+    // 싱글톤 대신 직접 참조
+    // EpisodeManager.Awake()에서 SetEpisodeManager()로 등록됨
+    private EpisodeManager episodeManager;
+
     private Coroutine blockRoutine;
     private Coroutine dodgeRoutine;
     private bool attackHitResolved;
@@ -52,6 +56,12 @@ public class CombatActionController : MonoBehaviour
     public bool IsInvincible { get; private set; }
     public bool IsAttacking { get; private set; }
     public bool IsBusy => IsAttacking || IsBlocking || IsInvincible;
+
+    // EpisodeManager에서 호출하여 자신을 등록
+    public void SetEpisodeManager(EpisodeManager manager)
+    {
+        episodeManager = manager;
+    }
 
     private void Awake()
     {
@@ -111,7 +121,7 @@ public class CombatActionController : MonoBehaviour
         LockRotation(transform.forward);
 
         // 공격 횟수 카운팅
-        EpisodeManager.Instance?.LogAttack(name);
+        episodeManager?.LogAttack(name);
 
         if (!ShouldSuppressCombatDebug())
         {
@@ -137,7 +147,7 @@ public class CombatActionController : MonoBehaviour
         cooldownSystem.TriggerBlockCooldown();
 
         // 방어 횟수 카운팅
-        EpisodeManager.Instance?.LogBlock(name);
+        episodeManager?.LogBlock(name);
 
         blockRoutine = StartCoroutine(BlockRoutine());
     }
@@ -169,7 +179,7 @@ public class CombatActionController : MonoBehaviour
         cooldownSystem.TriggerDodgeCooldown();
 
         // 회피 횟수 카운팅
-        EpisodeManager.Instance?.LogDodge(name);
+        episodeManager?.LogDodge(name);
 
         dodgeRoutine = StartCoroutine(DodgeRoutine(dodgeDirection));
     }
@@ -201,10 +211,10 @@ public class CombatActionController : MonoBehaviour
         switch (result)
         {
             case CombatHitResult.Hit:
-                EpisodeManager.Instance?.LogHit(name);
+                episodeManager?.LogHit(name);
                 break;
             case CombatHitResult.Blocked:
-                EpisodeManager.Instance?.LogBlocked(name);
+                episodeManager?.LogBlocked(name);
                 break;
         }
     }

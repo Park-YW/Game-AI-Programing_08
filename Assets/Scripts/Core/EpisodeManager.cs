@@ -5,6 +5,7 @@ using UnityEngine;
 
 // Resets both combatants and reports the episode result for later BT/RL training loops.
 // CSV 로깅 기능 추가: Assets/Results/episode_log.csv 에 에피소드 결과 자동 저장
+// 싱글톤 제거: 각 Arena의 EpisodeManager가 독립적으로 동작
 public class EpisodeManager : MonoBehaviour
 {
     [SerializeField] private CombatCharacter agentA;
@@ -15,13 +16,10 @@ public class EpisodeManager : MonoBehaviour
     [SerializeField] private float maxEpisodeTime = 60f;
 
     // CSV 로깅 활성화 여부 (Inspector에서 체크/해제 가능)
-    // 학습 중 행동 분포까지 수집하려면 true 유지
-    // 단순 동작 확인 시에는 false로 설정
+    // 학습 중에는 true, 단순 동작 확인 시에는 false로 설정
     [SerializeField] private bool enableCsvLogging = true;
 
     // 몇 에피소드마다 파일에 쓸지 설정
-    // 1 = 매 에피소드마다 저장 (안전하지만 느림)
-    // 10 = 10에피소드마다 저장 (학습 속도 영향 최소화)
     [SerializeField] private int flushInterval = 10;
 
     private bool episodeDone;
@@ -47,13 +45,12 @@ public class EpisodeManager : MonoBehaviour
     private int agentB_Hit = 0;
     private int agentB_Blocked = 0;
 
-    // 싱글톤 접근용
-    public static EpisodeManager Instance { get; private set; }
-
     private void Awake()
     {
-        Instance = this;
         FillDefaultReferences();
+
+        // 자신이 속한 Arena의 CombatActionController들에게 자신을 등록
+        RegisterToActionControllers();
     }
 
     private void Start()
@@ -76,14 +73,34 @@ public class EpisodeManager : MonoBehaviour
         FillDefaultReferences();
     }
 
-    // 앱 종료 시 버퍼에 남은 데이터 강제 저장
     private void OnApplicationQuit()
     {
         FlushBuffer();
     }
 
+    // ── 자신의 Arena 내 CombatActionController에 등록 ──────────────────────────────
+
+    private void RegisterToActionControllers()
+    {
+        // 자신과 같은 Arena(부모 또는 자신 포함)의 CombatActionController를 찾아 등록
+        CombatActionController[] controllers = GetComponentsInChildren<CombatActionController>(true);
+        if (controllers.Length == 0)
+        {
+            // 부모 기준으로 검색
+            controllers = GetComponentsInParent<CombatActionController>(true);
+        }
+        if (controllers.Length == 0 && transform.parent != null)
+        {
+            controllers = transform.parent.GetComponentsInChildren<CombatActionController>(true);
+        }
+
+        foreach (CombatActionController controller in controllers)
+        {
+            controller.SetEpisodeManager(this);
+        }
+    }
+
     // ── 행동 카운터 외부 호출 함수 ──────────────────────────────
-    // CombatActionController에서 호출
 
     public void LogAttack(string agentName)
     {
@@ -192,7 +209,6 @@ public class EpisodeManager : MonoBehaviour
         {
             BufferCsvLine(result, duration);
 
-            // flushInterval마다 파일에 쓰기
             if (episodeCount % flushInterval == 0)
             {
                 FlushBuffer();
@@ -221,7 +237,9 @@ public class EpisodeManager : MonoBehaviour
         Directory.CreateDirectory(directory);
 
         string timestamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        csvPath = directory + $"/episode_log_{timestamp}.csv";
+        // Arena 이름으로 구분 (EnvSpawner에서 TrainingArea_x_z 형식으로 지정)
+        string arenaName = transform.parent != null ? transform.parent.name : gameObject.name;
+        csvPath = directory + $"/episode_log_{timestamp}_{arenaName}.csv";
 
         string header =
             "Episode,Result,Duration," +
@@ -232,7 +250,6 @@ public class EpisodeManager : MonoBehaviour
         Debug.Log($"[EpisodeManager] CSV 로그 시작: {csvPath}");
     }
 
-    // 버퍼에 한 줄 추가 (파일 쓰기 없음)
     private void BufferCsvLine(string result, float duration)
     {
         csvBuffer.Append(
@@ -243,7 +260,6 @@ public class EpisodeManager : MonoBehaviour
             $"{agentB_Hit},{agentB_Blocked}\n");
     }
 
-    // 버퍼를 파일에 쓰고 초기화
     private void FlushBuffer()
     {
         if (string.IsNullOrEmpty(csvPath) || csvBuffer.Length == 0) return;

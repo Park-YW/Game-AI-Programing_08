@@ -26,12 +26,12 @@ public class StudentCombatAgent : Agent
 
     [Header("MinwooBT-Specific Rewards")]
     [SerializeField] private float threatResponseEvadeGuardReward = 0.05f;     // 공격 대응 (방어/회피)
-    [SerializeField] private float whiffGuardPenalty = -0.05f;                 // 헛가드
+    //[SerializeField] private float whiffGuardPenalty = -0.05f;                 // 헛가드
     [SerializeField] private float counterAttackReward = 0.1f;                 // 방어/회피 후 반격
     [SerializeField] private float rollCatchReward = 0.1f;                     // 회피 캐치
     [SerializeField] private float pressureManeuverReward = 0.001f;            // 체력이 낮을 때 압박 기동
     [SerializeField] private float pressureFleePenalty = -0.001f;              // 체력이 낮을 때 도망치면 패널티
-    [SerializeField] private float whiffPenalty = -0.05f;                      // 헛스윙 패널티
+    //[SerializeField] private float whiffPenalty = -0.05f;                      // 헛스윙 패널티
 
     [Header("Distance Maintenance Rewards")]
     [SerializeField] private float outOfRangePenalty = -0.001f;     // 적정 거리를 벗어났을 때 패널티
@@ -74,13 +74,13 @@ public class StudentCombatAgent : Agent
     private float previousSelfHealthRatio;
     private float previousOpponentHealthRatio;
 
-    // 공격 확인 변수
-    private bool wasAttackingLastStep;
-    private bool dealtDamageDuringCurrentAttack;
+    //// 공격 확인 변수
+    //private bool wasAttackingLastStep;
+    //private bool dealtDamageDuringCurrentAttack;
 
-    // 가드 확인 변수
-    private bool wasGuardingLastStep;
-    private bool threatDetectedDuringCurrentGuard;
+    //// 가드 확인 변수
+    //private bool wasGuardingLastStep;
+    //private bool threatDetectedDuringCurrentGuard;
 
     public override void Initialize()
     {
@@ -115,11 +115,11 @@ public class StudentCombatAgent : Agent
         hasRewardedForCurrentRollCatch = false;
         counterWindowEndTime = 0f;
 
-        wasAttackingLastStep = false;
-        dealtDamageDuringCurrentAttack = false;
+        //wasAttackingLastStep = false;
+        //dealtDamageDuringCurrentAttack = false;
 
-        wasGuardingLastStep = false;
-        threatDetectedDuringCurrentGuard = false;
+        //wasGuardingLastStep = false;
+        //threatDetectedDuringCurrentGuard = false;
     }
 
     public override void WriteDiscreteActionMask(IDiscreteActionMask actionMask)
@@ -167,20 +167,17 @@ public class StudentCombatAgent : Agent
         UpdatePredictions();
         var opponentAction = opponent.GetComponent<CombatActionController>();
 
-        // 1. 내 상태 관측 (7개) + 3개
+        // 1. 내 상태 관측 7개
         sensor.AddObservation(self.CurrentHealthRatio);
         sensor.AddObservation(actionController.IsAttacking ? 1f : 0f);
         sensor.AddObservation(actionController.IsBlocking ? 1f : 0f);
         sensor.AddObservation(actionController.IsInvincible ? 1f : 0f);
-        sensor.AddObservation(cooldownSystem.IsAttackReady() ? 1f : 0f);
-        sensor.AddObservation(cooldownSystem.IsBlockReady() ? 1f : 0f);
-        sensor.AddObservation(cooldownSystem.IsDodgeReady() ? 1f : 0f);
         sensor.AddObservation(cooldownSystem.GetAttackCooldownRatio());
         sensor.AddObservation(cooldownSystem.GetBlockCooldownRatio());
         sensor.AddObservation(cooldownSystem.GetDodgeCooldownRatio());
 
         // 2. 상대 상태 관측 (9개)
-        sensor.AddObservation(opponent.CurrentHealthRatio);
+        sensor.AddObservation(opponent.CurrentHealthRatio < 0.3f ? 1f : 0f);
 
         Vector3 toTarget = opponent.transform.position - self.transform.position;
         float rawDistance = toTarget.magnitude;
@@ -188,7 +185,7 @@ public class StudentCombatAgent : Agent
         // 연속적 거리 관측
         sensor.AddObservation(Mathf.Clamp(rawDistance, 0, 10f) / 10f);
 
-        // 이산적 거리 관측 (MinwooBT 임계값 기준 적용)
+        // 이산적 거리 관측
         sensor.AddObservation(rawDistance <= 1.8f ? 1f : 0f); // 공격 사거리 내 
         sensor.AddObservation(rawDistance > 3.5f ? 1f : 0f);  // 유지 거리 밖
 
@@ -285,59 +282,59 @@ public class StudentCombatAgent : Agent
         // =========================================================
         bool isSelfAttacking = actionController.IsAttacking;
 
-        // 1. 내 공격 시작 시점 (Rising Edge)
-        if (isSelfAttacking && !wasAttackingLastStep)
-        {
-            dealtDamageDuringCurrentAttack = false;
-        }
+        //// 1. 내 공격 시작 시점 (Rising Edge)
+        //if (isSelfAttacking && !wasAttackingLastStep)
+        //{
+        //    dealtDamageDuringCurrentAttack = false;
+        //}
 
-        // 2. 내 공격 애니메이션 진행 중 타격 성공 여부 추적
-        if (isSelfAttacking)
-        {
-            if (dealtDamageThisFrame) dealtDamageDuringCurrentAttack = true;
-        }
+        //// 2. 내 공격 애니메이션 진행 중 타격 성공 여부 추적
+        //if (isSelfAttacking)
+        //{
+        //    if (dealtDamageThisFrame) dealtDamageDuringCurrentAttack = true;
+        //}
 
-        // 3. 내 공격 종료 시점 (Falling Edge) - 헛스윙 판정
-        if (!isSelfAttacking && wasAttackingLastStep)
-        {
-            // 공격 모션이 끝났는데 데미지를 한 번도 못 입혔다면 헛스윙
-            if (!dealtDamageDuringCurrentAttack)
-            {
-                AddReward(whiffPenalty);
-            }
-        }
+        //// 3. 내 공격 종료 시점 (Falling Edge) - 헛스윙 판정
+        //if (!isSelfAttacking && wasAttackingLastStep)
+        //{
+        //    // 공격 모션이 끝났는데 데미지를 한 번도 못 입혔다면 헛스윙
+        //    if (!dealtDamageDuringCurrentAttack)
+        //    {
+        //        AddReward(whiffPenalty);
+        //    }
+        //}
 
         // =========================================================
         // [0.5] 헛가드 (Whiff Guard) 판정 추론
         // =========================================================
         bool isSelfGuarding = actionController.IsBlocking;
 
-        // 1. 내 가드 시작 시점 (Rising Edge)
-        if (isSelfGuarding && !wasGuardingLastStep)
-        {
-            // 가드를 올리는 순간, 아직 위협은 없다고 초기화
-            threatDetectedDuringCurrentGuard = false;
-        }
+        //// 1. 내 가드 시작 시점 (Rising Edge)
+        //if (isSelfGuarding && !wasGuardingLastStep)
+        //{
+        //    // 가드를 올리는 순간, 아직 위협은 없다고 초기화
+        //    threatDetectedDuringCurrentGuard = false;
+        //}
 
-        // 2. 내 가드 애니메이션 진행 중 위협 감지
-        if (isSelfGuarding)
-        {
-            // 내가 가드를 올리고 있는 동안, 적이 공격 모션 중이고 사거리 내에 있다면 '유효한 가드'로 인정
-            if (isOppAttacking && distanceToOpponent <= 3.5f)
-            {
-                threatDetectedDuringCurrentGuard = true;
-            }
-        }
+        //// 2. 내 가드 애니메이션 진행 중 위협 감지
+        //if (isSelfGuarding)
+        //{
+        //    // 내가 가드를 올리고 있는 동안, 적이 공격 모션 중이고 사거리 내에 있다면 '유효한 가드'로 인정
+        //    if (isOppAttacking && distanceToOpponent <= 3.5f)
+        //    {
+        //        threatDetectedDuringCurrentGuard = true;
+        //    }
+        //}
 
-        // 3. 내 가드 종료 시점 (Falling Edge) - 헛가드 판정
-        if (!isSelfGuarding && wasGuardingLastStep)
-        {
-            // 가드를 내렸는데, 가드를 올리고 있던 내내 적의 유의미한 공격(위협)이 전혀 없었다면 헛가드!
-            if (!threatDetectedDuringCurrentGuard)
-            {
-                AddReward(whiffGuardPenalty);
-            }
-        }
+        //// 3. 내 가드 종료 시점 (Falling Edge) - 헛가드 판정
+        //if (!isSelfGuarding && wasGuardingLastStep)
+        //{
+        //    // 가드를 내렸는데, 가드를 올리고 있던 내내 적의 유의미한 공격(위협)이 전혀 없었다면 헛가드!
+        //    if (!threatDetectedDuringCurrentGuard)
+        //    {
+        //        AddReward(whiffGuardPenalty);
+        //    }
+        //}
 
         // =========================================================
         // [1] 위협 대응 및 카운터 어택 추론
@@ -366,7 +363,7 @@ public class StudentCombatAgent : Agent
                 if (distanceToOpponent <= 2.0f) // 허공 가드 방지용 거리 조건
                 {
                     AddReward(threatResponseEvadeGuardReward);
-                    counterWindowEndTime = Time.time + 1.5f; // 카운터 기회 제공
+                    counterWindowEndTime = Time.time + 0.7f; // 카운터 기회 제공
                 }
             }
         }
@@ -423,11 +420,11 @@ public class StudentCombatAgent : Agent
             // BT의 설정값: attackDistance = 1.8f, maintainDistance = 3.5f
             if (distanceToOpponent < 1.8f)
             {
-                // 너무 가깝지만 내가 공격 중이 아니라면 뒤로 물러나도록 패널티
-                if (!isSelfAttacking && !actionController.IsBlocking)
-                {
-                    AddReward(outOfRangePenalty);
-                }
+                //// 너무 가깝지만 내가 공격 중이 아니라면 뒤로 물러나도록 패널티
+                //if (!isSelfAttacking && !actionController.IsBlocking)
+                //{
+                //    AddReward(outOfRangePenalty);
+                //}
             }
             else if (distanceToOpponent > 3.5f)
             {
@@ -449,18 +446,14 @@ public class StudentCombatAgent : Agent
 
         if (justDied)
         {
-            // 내가 졌을 때: 상대방 체력이 많이 남았을수록 더 큰 페널티를 받음
-            // 예: 상대 체력 100% 남기고 지면 -2.0 / 상대 체력 10% 남기고 지면 -1.1
             float additionalPenalty = opponent.CurrentHealthRatio;
-            AddReward(deathPenalty);// - additionalPenalty);
+            AddReward(deathPenalty);
             EndEpisode();
         }
         else if (oppJustDied)
         {
-            // 내가 이겼을 때: 내 체력이 많이 남았을수록 더 큰 잭팟을 터트림
-            // 예: 내 체력 100% 남기고 이기면 +2.0 / 내 체력 10% 남기고 이기면 +1.1
             float healthBonus = self.CurrentHealthRatio;
-            AddReward(killReward);// + healthBonus);
+            AddReward(killReward);
             EndEpisode();
         }
 
@@ -473,10 +466,10 @@ public class StudentCombatAgent : Agent
         wasOpponentAttackingLastStep = isOppAttacking;
         wasOpponentEvadingLastStep = isOppEvading;
 
-        wasAttackingLastStep = isSelfAttacking;
+        //wasAttackingLastStep = isSelfAttacking;
 
-        wasAttackingLastStep = isSelfAttacking;
-        wasGuardingLastStep = isSelfGuarding;
+        //wasAttackingLastStep = isSelfAttacking;
+        //wasGuardingLastStep = isSelfGuarding;
     }
 
     private void FillDefaultReferences()
