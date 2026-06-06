@@ -1,0 +1,5 @@
+Episode,Result,Duration,A_Attack,A_Block,A_Dodge,A_Hit,A_Blocked,B_Attack,B_Block,B_Dodge,B_Hit,B_Blocked
+1,AgentA wins,26.78,7,6,0,5,2,10,10,4,0,2
+2,AgentA wins,17.66,6,7,2,5,1,7,6,3,0,5
+3,AgentA wins,38.11,11,12,1,5,6,14,13,6,0,3
+4,AgentA wins,20.61,6,7,0,5,0,8,7,4,0,2

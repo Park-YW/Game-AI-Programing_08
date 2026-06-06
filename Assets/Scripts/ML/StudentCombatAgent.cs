@@ -1,4 +1,4 @@
-using Unity.MLAgents;
+Ôªøusing Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
 using UnityEngine;
@@ -14,20 +14,16 @@ public class StudentCombatAgent : Agent
     public CooldownSystem cooldownSystem;
     public EpisodeManager episodeManager;
 
-    private const int MoveNone = 0;
-    private const int MoveForward = 1;
-    private const int MoveBackward = 2;
-    private const int MoveLeft = 3;
-    private const int MoveRight = 4;
-
     private const int SkillNone = 0;
     private const int SkillAttack = 1;
     private const int SkillBlock = 2;
     private const int SkillDodge = 3;
 
-    private float lastSelfHealth = 1f;
-    private float lastOpponentHealth = 1f;
-    private bool isInitialized = false;
+    private float previousSelfHp;
+    private float previousOpponentHp;
+
+    // ÌîÑÎ†àÏûÑ Ï∂îÏ†ÅÏö© ÏÉÅÌÉú Í∏∞Ïñµ Î≥ÄÏàò
+    private bool wasBlockingLastFrame = false;
 
     public override void Initialize()
     {
@@ -43,11 +39,25 @@ public class StudentCombatAgent : Agent
     {
         FillDefaultReferences();
 
+        wasBlockingLastFrame = false;
+
+        Rigidbody rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+
+        Animator anim = GetComponentInChildren<Animator>();
+        if (anim != null)
+        {
+            anim.Rebind();
+        }
+
         if (self != null && opponent != null)
         {
-            lastSelfHealth = self.CurrentHealthRatio;
-            lastOpponentHealth = opponent.CurrentHealthRatio;
-            isInitialized = true;
+            previousSelfHp = self.CurrentHealth;
+            previousOpponentHp = opponent.CurrentHealth;
         }
     }
 
@@ -58,29 +68,25 @@ public class StudentCombatAgent : Agent
         sensor.AddObservation(self.CurrentHealthRatio);
         sensor.AddObservation(opponent.CurrentHealthRatio);
 
-        sensor.AddObservation(cooldownSystem.IsAttackReady() ? 1.0f : 0.0f);
-        sensor.AddObservation(cooldownSystem.IsBlockReady() ? 1.0f : 0.0f);
-        sensor.AddObservation(cooldownSystem.IsDodgeReady() ? 1.0f : 0.0f);
+        float distance = Vector3.Distance(transform.position, opponent.transform.position);
+        sensor.AddObservation(distance);
 
-        Vector3 offset = GetHorizontalOffsetToTarget();
-        float distance = offset.magnitude;
-        sensor.AddObservation(Mathf.Clamp01(distance / 20.0f));
+        sensor.AddObservation(cooldownSystem.IsAttackReady() ? 1f : 0f);
+        sensor.AddObservation(cooldownSystem.IsBlockReady() ? 1f : 0f);
+        sensor.AddObservation(cooldownSystem.IsDodgeReady() ? 1f : 0f);
 
-        Vector3 dirToTarget = distance <= 0.0001f ? transform.forward : offset.normalized;
-        sensor.AddObservation(dirToTarget.x);
-        sensor.AddObservation(dirToTarget.z);
+        sensor.AddObservation(opponent.ActionController.IsAttacking ? 1f : 0f);
+        sensor.AddObservation(opponent.ActionController.IsBlocking ? 1f : 0f);
+        sensor.AddObservation(opponent.ActionController.IsInvincible ? 1f : 0f);
 
-        if (opponent.ActionController != null)
-        {
-            sensor.AddObservation(opponent.ActionController.IsBlocking ? 1.0f : 0.0f);
-            sensor.AddObservation(opponent.ActionController.IsInvincible ? 1.0f : 0.0f);
-        }
-        else
-        {
-            sensor.AddObservation(0.0f);
-            sensor.AddObservation(0.0f);
-        }
-        sensor.AddObservation(actionController.IsBlocking || actionController.IsAttacking ? 1.0f : 0.0f);
+        bool opponentVulnerable = !opponent.ActionController.IsAttacking &&
+                                   !opponent.ActionController.IsBlocking &&
+                                   !opponent.ActionController.IsInvincible;
+        sensor.AddObservation(opponentVulnerable ? 1f : 0f);
+
+        Vector3 dir = (opponent.transform.position - transform.position).normalized;
+        sensor.AddObservation(dir.x);
+        sensor.AddObservation(dir.z);
     }
 
     public override void OnActionReceived(ActionBuffers actions)
@@ -88,107 +94,163 @@ public class StudentCombatAgent : Agent
         if (self == null || opponent == null || actionController == null || cooldownSystem == null) return;
         if (self.IsDead) return;
 
-        if (!isInitialized || lastSelfHealth <= 0.05f || lastOpponentHealth <= 0.05f)
+        int combatAction = actions.DiscreteActions[0];
+        int movementAction = actions.DiscreteActions[1];
+
+        Vector3 toOpponent = (opponent.transform.position - transform.position).normalized;
+        Vector3 moveDirection = Vector3.zero;
+
+        // Ïù¥Îèô Ï†úÏñ¥
+        switch (movementAction)
         {
-            lastSelfHealth = self.CurrentHealthRatio;
-            lastOpponentHealth = opponent.CurrentHealthRatio;
-            isInitialized = true;
-            return;
+            case 1: moveDirection = toOpponent; break;
+            case 2: moveDirection = -toOpponent; break;
+            case 3: moveDirection = -transform.right; break;
+            case 4: moveDirection = transform.right; break;
         }
 
-        int moveCommand = actions.DiscreteActions[0];
-        int skillCommand = actions.DiscreteActions[1];
+        float distance = Vector3.Distance(transform.position, opponent.transform.position);
 
-        Vector3 dirToTarget = GetDirectionToTarget();
-        Vector3 leftDirection = Vector3.Cross(dirToTarget, Vector3.up).normalized;
-        float distance = GetHorizontalOffsetToTarget().magnitude;
-
-        actionController.Face(dirToTarget);
-
-        if (!actionController.IsBlocking)
+        if (moveDirection != Vector3.zero)
         {
-            switch (moveCommand)
+            // [Î≥ÄÍ≤ΩÏ†ê 1]: Î¨¥ÏßÄÏÑ± Í∞úÎèå Î∞è Î™∏Ïã∏ÏõÄ ÎπÑÎπÑÍ∏∞ ÌéòÎÑêÌã∞ Ìè≠ÌÉÑ ÏÉÅÌñ• (-0.2 -> -1.0)
+            if (distance <= 0.8f && movementAction == 1)
             {
-                case MoveForward:
-                    actionController.Move(dirToTarget);
-                    break;
-                case MoveBackward:
-                    actionController.Move(-dirToTarget);
-                    break;
-                case MoveLeft:
-                    actionController.Move(leftDirection);
-                    break;
-                case MoveRight:
-                    actionController.Move(-leftDirection);
-                    break;
-                default:
-                    actionController.Move(Vector3.zero);
-                    break;
+                actionController.Move(-toOpponent); // Í∞ïÏ†ú Î∞±Ïä§ÌÖù Ïú†ÎèÑ
+                AddReward(-1.0f);
+            }
+            else
+            {
+                // [Î≥ÄÍ≤ΩÏ†ê 2]: Ïù¥ÎØ∏ ÏÇ¨Í±∞Î¶¨ ÎÇ¥Ïóê Ï∂©Î∂ÑÌûà Îì§Ïñ¥ÏôîÎäîÎç∞ÎèÑ Î¨¥ÏûëÏ†ï ÎèåÏßÑ(W)Îßå ÎàÑÎ•¥Î©¥ ÎØ∏ÏÑ∏ Í∞êÏ†ê Î∂ÄÏó¨
+                if (distance <= 1.8f && movementAction == 1)
+                {
+                    AddReward(-0.02f);
+                }
+                actionController.Move(moveDirection);
             }
         }
-        else
+
+        // ÌòÑÏû¨ Ïï°ÏÖò ÏãúÏûë Ï†Ñ Í∞ÄÎìú ÏÉÅÌÉú ÏûÑÏãú Î∞±ÏóÖ
+        bool currentBlockingFrame = actionController.IsBlocking;
+
+        // Ïä§ÌÇ¨ Ï†úÏñ¥ Î£®Ìã¥
+        switch (combatAction)
         {
-            actionController.Move(Vector3.zero);
+            case SkillAttack:
+                if (cooldownSystem.IsAttackReady())
+                {
+                    if (opponent.ActionController.IsBlocking) AddReward(-0.2f);
+
+                    if (distance > 2.1f)
+                    {
+                        AddReward(-0.3f);
+                    }
+                    else if (wasBlockingLastFrame)
+                    {
+                        AddReward(0.5f);
+                    }
+
+                    actionController.Face(toOpponent);
+                    actionController.Attack();
+                }
+                break;
+
+            case SkillBlock:
+                if (cooldownSystem.IsBlockReady())
+                {
+                    if (opponent.ActionController.IsAttacking) AddReward(2.5f);
+                    else AddReward(-0.6f);
+
+                    actionController.Face(toOpponent);
+                    actionController.Block(toOpponent);
+                }
+                break;
+
+            case SkillDodge:
+                if (cooldownSystem.IsDodgeReady())
+                {
+                    if (opponent.ActionController.IsAttacking) AddReward(1.5f);
+                    else AddReward(-1.2f);
+
+                    actionController.Dodge(-toOpponent);
+                }
+                break;
         }
 
-        if (skillCommand == SkillAttack && cooldownSystem.IsAttackReady())
+        // Ïã§ÏãúÍ∞Ñ ÎîúÍµêÌôò Î∞è ÌîºÌï¥ Ïó∞ÏÇ∞ Ï†ïÏÇ∞ Íµ¨Ïó≠
+        if (opponent.CurrentHealth < previousOpponentHp)
         {
-            if (opponent.ActionController != null && opponent.ActionController.IsBlocking)
+            AddReward(1.0f);
+
+            if (wasBlockingLastFrame)
             {
-                AddReward(-1.5f);
+                AddReward(2.0f);
+                if (transform.parent != null)
+                {
+                    Debug.Log($"[{transform.parent.name}] üõ°Ô∏è‚öîÔ∏è Í∞ÄÎìú ÌõÑ Î∞òÍ≤© Ï†ÅÏ§ë (Î≥¥ÏÉÅ +2.0)");
+                }
             }
-            else if (distance > 2.0f)
+
+            bool opponentVulnerable = !opponent.ActionController.IsAttacking &&
+                                       !opponent.ActionController.IsBlocking &&
+                                       !opponent.ActionController.IsInvincible;
+            if (opponentVulnerable) AddReward(1.0f);
+        }
+
+        if (self.CurrentHealth < previousSelfHp)
+        {
+            if (wasBlockingLastFrame && !currentBlockingFrame)
             {
-                AddReward(-0.2f);
+                AddReward(-4.0f);
             }
-            actionController.Attack();
-        }
-        else if (skillCommand == SkillBlock && cooldownSystem.IsBlockReady())
-        {
-            actionController.Block(dirToTarget);
-        }
-        else if (skillCommand == SkillDodge && cooldownSystem.IsDodgeReady())
-        {
-            actionController.Dodge(dirToTarget);
+            else
+            {
+                AddReward(-3.0f);
+            }
         }
 
-        if (opponent.CurrentHealthRatio < lastOpponentHealth && lastOpponentHealth > 0.1f)
+        // [Î≥ÄÍ≤ΩÏ†ê 3]: ÏàòÎπÑÌòï Ï†ÑÏö© 'Ìô©Í∏à ÏÇ¨Í±∞Î¶¨ ÎåÄÏπò' Ïú†ÎèÑ Î≥¥ÏÉÅ Ï†ÑÎ©¥ Ïû¨Ï†ïÎ¶¨
+        if (opponent.CurrentHealthRatio > 0.3f)
         {
-            float damageDealt = lastOpponentHealth - opponent.CurrentHealthRatio;
-            AddReward(damageDealt * 4.0f);
-            lastOpponentHealth = opponent.CurrentHealthRatio;
+            if (distance >= 1.8f && distance <= 2.8f)
+            {
+                // ÏµúÏ†ÅÏùò ÏàòÎπÑÌòï ÏïÑÏõÉÎ≥µÏã± Í±∞Î¶¨ Ïú†ÏßÄ Ïãú Ïà®Ïâ¨Í∏∞ Í∞ÄÏÇ∞Ï†ê 10Î∞∞ ÏÉÅÌñ• (+0.005 -> +0.05)
+                if (actionController.IsBlocking && !opponent.ActionController.IsAttacking)
+                {
+                    AddReward(-0.02f); // Ï°¥Î≤Ñ Î∞©ÏßÄ
+                }
+                else
+                {
+                    AddReward(0.05f);
+                }
+            }
+            else if (distance < 1.5f)
+            {
+                // ÎÑàÎ¨¥ Î∞îÏßù Î∂ôÏñ¥ÏÑú Îì§Ïù¥Î∞õÏúºÎ©¥ Í∞êÏ†ê Ï£ºÏûÖ
+                AddReward(-0.05f);
+            }
+            else
+            {
+                // ÎÑàÎ¨¥ Î©ÄÎ¶¨ Ïß∏Î©¥(ÎèÑÎßùÍ∞ÄÎ©¥) Í±∞Î¶¨ ÎπÑÎ°Ä Í∞êÏ†ê
+                AddReward(-0.02f * distance);
+            }
         }
 
-        if (self.CurrentHealthRatio < lastSelfHealth && lastSelfHealth > 0.1f)
-        {
-            float damageTaken = lastSelfHealth - self.CurrentHealthRatio;
-            AddReward(-damageTaken * 2.0f);
-            lastSelfHealth = self.CurrentHealthRatio;
-        }
+        // Îã§Ïùå ÌîÑÎ†àÏûÑÏùÑ ÏúÑÌï¥ ÌòÑÏû¨ ÏÉÅÌÉú Ïú†Í∏∞Ï†Å Î∞±ÏóÖ
+        wasBlockingLastFrame = currentBlockingFrame;
 
-        // ---------------------------------------------------------------------
-        // [∞≠∑¬«— √ﬂ∞› ¿Øµµ ∫∏ªÛ Ω√Ω∫≈€¿∏∑Œ ∞≥¡∂]
-        // ---------------------------------------------------------------------
-        if (distance <= 2.0f)
-        {
-            // ∞¯∞› ¿Ø»ø ªÁ∞≈∏Æ ≥ª∑Œ ¡¯¿‘ º∫∞¯ Ω√ ∏≈ «¡∑π¿” ∆ƒ∞›¿˚¿Œ ∫∏ªÛ ∫Œø© (∞°¿Â ¡ﬂø‰)
-            AddReward(0.1f);
-        }
-        else
-        {
-            // ∞≈∏Æ∞° 2.0f∫∏¥Ÿ ∏÷∏Æ ∂≥æÓ¡Æ ¿÷¿∏∏È ªÛΩ√∑Œ ∞≈¥Î«— ∆–≥Œ∆º ∫Œø©!
-            // ¿Ã ∆–≥Œ∆º ∂ßπÆø° AI¥¬ ∞°∏∏»˜ º≠ ¿÷¿∏∏È ¡°ºˆ∞° ∞Ëº” ∆ƒ∏Í¿˚¿∏∑Œ ±¿Ãπ«∑Œ, 
-            // ªÏ±‚ ¿ß«ÿº≠∂Ûµµ π´¡∂∞« ¿¸¡¯(MoveForward)¿ª º±≈√«ÿ ¿˚ø°∞‘ ¡¢±Ÿ«œ∞‘ µÀ¥œ¥Ÿ.
-            AddReward(-0.05f * distance);
-        }
+        previousOpponentHp = opponent.CurrentHealth;
+        previousSelfHp = self.CurrentHealth;
+
         if (opponent.IsDead)
         {
-            SetReward(5.0f);
+            AddReward(10.0f);
             EndEpisode();
         }
-        else if (self.IsDead)
+
+        if (self.IsDead)
         {
-            SetReward(-3.0f);
+            AddReward(-10.0f);
             EndEpisode();
         }
     }
@@ -197,30 +259,16 @@ public class StudentCombatAgent : Agent
     {
         var discreteActions = actionsOut.DiscreteActions;
 
-        if (Input.GetKey(KeyCode.W)) discreteActions[0] = MoveForward;
-        else if (Input.GetKey(KeyCode.S)) discreteActions[0] = MoveBackward;
-        else if (Input.GetKey(KeyCode.A)) discreteActions[0] = MoveLeft;
-        else if (Input.GetKey(KeyCode.D)) discreteActions[0] = MoveRight;
-        else discreteActions[0] = MoveNone;
+        if (Input.GetKey(KeyCode.W)) discreteActions[1] = 1;
+        else if (Input.GetKey(KeyCode.S)) discreteActions[1] = 2;
+        else if (Input.GetKey(KeyCode.A)) discreteActions[1] = 3;
+        else if (Input.GetKey(KeyCode.D)) discreteActions[1] = 4;
+        else discreteActions[1] = 0;
 
-        if (Input.GetKey(KeyCode.J)) discreteActions[1] = SkillAttack;
-        else if (Input.GetKey(KeyCode.K)) discreteActions[1] = SkillBlock;
-        else if (Input.GetKey(KeyCode.L)) discreteActions[1] = SkillDodge;
-        else discreteActions[1] = SkillNone;
-    }
-
-    private Vector3 GetDirectionToTarget()
-    {
-        Vector3 offset = GetHorizontalOffsetToTarget();
-        return offset.sqrMagnitude <= 0.0001f ? transform.forward : offset.normalized;
-    }
-
-    private Vector3 GetHorizontalOffsetToTarget()
-    {
-        if (opponent == null) return Vector3.zero;
-        Vector3 offset = opponent.transform.position - transform.position;
-        offset.y = 0f;
-        return offset;
+        if (Input.GetKey(KeyCode.J)) discreteActions[0] = SkillAttack;
+        else if (Input.GetKey(KeyCode.K)) discreteActions[0] = SkillBlock;
+        else if (Input.GetKey(KeyCode.L)) discreteActions[0] = SkillDodge;
+        else discreteActions[0] = SkillNone;
     }
 
     private void FillDefaultReferences()
@@ -228,6 +276,7 @@ public class StudentCombatAgent : Agent
         if (self == null) self = GetComponent<CombatCharacter>();
         if (actionController == null) actionController = GetComponent<CombatActionController>();
         if (cooldownSystem == null) cooldownSystem = GetComponent<CooldownSystem>();
+        if (episodeManager == null) episodeManager = FindFirstObjectByType<EpisodeManager>();
 
         if (opponent == null)
         {
@@ -241,7 +290,5 @@ public class StudentCombatAgent : Agent
                 }
             }
         }
-
-        if (episodeManager == null) episodeManager = FindFirstObjectByType<EpisodeManager>();
     }
 }
