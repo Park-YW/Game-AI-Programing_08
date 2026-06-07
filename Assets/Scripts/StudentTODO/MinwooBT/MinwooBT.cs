@@ -178,9 +178,9 @@ public class MinwooBTStrategy : MonoBehaviour
                     { 
                         if(bb.TargetAttackVulnerableUntil - Time.time > 1.54f)
                         {
-                            return true; // 공격이 곧 끝날 것 같으면 회피하지 않도록
+                            return true;
                         }
-                        return false;
+                        return false; // 공격이 곧 끝날 것 같으면 회피하지 않도록
                     }),
                     new ActionNode(ActionDodgeBackward)
                 )
@@ -276,6 +276,9 @@ public class MinwooBTStrategy : MonoBehaviour
         // =========================================================
         // [4] Maneuver (적과의 거리에 따른 대응 기동)
         // =========================================================
+
+        Func<BTNodeStatus, BTNodeStatus> KeepRunning = _ => BTNodeStatus.Running; // 데코레이터를 위한 헬퍼 함수
+
         var maneuverSeq = new SelectorNode(
             // [A. 거리가 너무 멀 때 -> 거리를 좁히기 (전진)]
             new SequenceNode(
@@ -287,7 +290,10 @@ public class MinwooBTStrategy : MonoBehaviour
                 }),
                 new ParallelNode(1, 2,
                     new ConditionNode(() => bb.IsTargetAttacking || Time.time >= bb.ManeuverEndTime || bb.DistanceToTarget <= maintainDistance),
-                    new ActionNode(() => { ActionMoveIn(); return BTNodeStatus.Running; })
+                    new DecoratorNode(
+                        new ActionNode(ActionMoveIn),
+                        KeepRunning
+                    )
                 )
             ),
 
@@ -311,12 +317,14 @@ public class MinwooBTStrategy : MonoBehaviour
                         if (bb.DistanceToTarget < attackDistance || bb.DistanceToTarget > maintainDistance) return true;
                         return false;
                     }),
-                    new ActionNode(() => {
-                        if (bb.CurrentManeuver == Blackboard.ManeuverType.Left) ActionSideStepLeft();
-                        else if (bb.CurrentManeuver == Blackboard.ManeuverType.Right) ActionSideStepRight();
-                        else ActionIdle(); // 정지 상태로 타겟 주시
-                        return BTNodeStatus.Running;
-                    })
+                    new DecoratorNode(
+                        new ActionNode(() => {
+                            if (bb.CurrentManeuver == Blackboard.ManeuverType.Left) ActionSideStepLeft();
+                            else if (bb.CurrentManeuver == Blackboard.ManeuverType.Right) ActionSideStepRight();
+                            else ActionIdle(); // 정지 상태로 타겟 주시
+                        }),
+                        KeepRunning
+                    )
                 )
             ),
 
@@ -330,7 +338,10 @@ public class MinwooBTStrategy : MonoBehaviour
                 }),
                 new ParallelNode(1, 2,
                     new ConditionNode(() => bb.IsTargetAttacking || Time.time >= bb.ManeuverEndTime || bb.DistanceToTarget >= attackDistance),
-                    new ActionNode(() => { ActionMoveBack(); return BTNodeStatus.Running; })
+                    new DecoratorNode(
+                        new ActionNode(ActionMoveIn), 
+                        KeepRunning
+                    )
                 )
             )
         );
