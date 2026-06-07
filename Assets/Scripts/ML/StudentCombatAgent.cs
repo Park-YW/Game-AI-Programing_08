@@ -74,14 +74,6 @@ public class StudentCombatAgent : Agent
     private float previousSelfHealthRatio;
     private float previousOpponentHealthRatio;
 
-    //// 공격 확인 변수
-    //private bool wasAttackingLastStep;
-    //private bool dealtDamageDuringCurrentAttack;
-
-    //// 가드 확인 변수
-    //private bool wasGuardingLastStep;
-    //private bool threatDetectedDuringCurrentGuard;
-
     public override void Initialize()
     {
         FillDefaultReferences();
@@ -114,12 +106,6 @@ public class StudentCombatAgent : Agent
         wasOpponentEvadingLastStep = false;
         hasRewardedForCurrentRollCatch = false;
         counterWindowEndTime = 0f;
-
-        //wasAttackingLastStep = false;
-        //dealtDamageDuringCurrentAttack = false;
-
-        //wasGuardingLastStep = false;
-        //threatDetectedDuringCurrentGuard = false;
     }
 
     public override void WriteDiscreteActionMask(IDiscreteActionMask actionMask)
@@ -277,64 +263,8 @@ public class StudentCombatAgent : Agent
 
         AddReward(stepPenalty);
 
-        // =========================================================
-        // [0] 헛스윙 (Whiff) 판정 추론
-        // =========================================================
         bool isSelfAttacking = actionController.IsAttacking;
-
-        //// 1. 내 공격 시작 시점 (Rising Edge)
-        //if (isSelfAttacking && !wasAttackingLastStep)
-        //{
-        //    dealtDamageDuringCurrentAttack = false;
-        //}
-
-        //// 2. 내 공격 애니메이션 진행 중 타격 성공 여부 추적
-        //if (isSelfAttacking)
-        //{
-        //    if (dealtDamageThisFrame) dealtDamageDuringCurrentAttack = true;
-        //}
-
-        //// 3. 내 공격 종료 시점 (Falling Edge) - 헛스윙 판정
-        //if (!isSelfAttacking && wasAttackingLastStep)
-        //{
-        //    // 공격 모션이 끝났는데 데미지를 한 번도 못 입혔다면 헛스윙
-        //    if (!dealtDamageDuringCurrentAttack)
-        //    {
-        //        AddReward(whiffPenalty);
-        //    }
-        //}
-
-        // =========================================================
-        // [0.5] 헛가드 (Whiff Guard) 판정 추론
-        // =========================================================
         bool isSelfGuarding = actionController.IsBlocking;
-
-        //// 1. 내 가드 시작 시점 (Rising Edge)
-        //if (isSelfGuarding && !wasGuardingLastStep)
-        //{
-        //    // 가드를 올리는 순간, 아직 위협은 없다고 초기화
-        //    threatDetectedDuringCurrentGuard = false;
-        //}
-
-        //// 2. 내 가드 애니메이션 진행 중 위협 감지
-        //if (isSelfGuarding)
-        //{
-        //    // 내가 가드를 올리고 있는 동안, 적이 공격 모션 중이고 사거리 내에 있다면 '유효한 가드'로 인정
-        //    if (isOppAttacking && distanceToOpponent <= 3.5f)
-        //    {
-        //        threatDetectedDuringCurrentGuard = true;
-        //    }
-        //}
-
-        //// 3. 내 가드 종료 시점 (Falling Edge) - 헛가드 판정
-        //if (!isSelfGuarding && wasGuardingLastStep)
-        //{
-        //    // 가드를 내렸는데, 가드를 올리고 있던 내내 적의 유의미한 공격(위협)이 전혀 없었다면 헛가드!
-        //    if (!threatDetectedDuringCurrentGuard)
-        //    {
-        //        AddReward(whiffGuardPenalty);
-        //    }
-        //}
 
         // =========================================================
         // [1] 위협 대응 및 카운터 어택 추론
@@ -465,11 +395,6 @@ public class StudentCombatAgent : Agent
 
         wasOpponentAttackingLastStep = isOppAttacking;
         wasOpponentEvadingLastStep = isOppEvading;
-
-        //wasAttackingLastStep = isSelfAttacking;
-
-        //wasAttackingLastStep = isSelfAttacking;
-        //wasGuardingLastStep = isSelfGuarding;
     }
 
     private void FillDefaultReferences()
