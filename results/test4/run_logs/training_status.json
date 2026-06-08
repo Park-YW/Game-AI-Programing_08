@@ -1,0 +1,56 @@
+{
+    "CombatAgent": {
+        "checkpoints": [
+            {
+                "steps": 49782,
+                "file_path": "results\\test4\\CombatAgent\\CombatAgent-49782.onnx",
+                "reward": null,
+                "creation_time": 1780339396.2598886,
+                "auxillary_file_paths": [
+                    "results\\test4\\CombatAgent\\CombatAgent-49782.pt"
+                ]
+            },
+            {
+                "steps": 99780,
+                "file_path": "results\\test4\\CombatAgent\\CombatAgent-99780.onnx",
+                "reward": null,
+                "creation_time": 1780339548.0517197,
+                "auxillary_file_paths": [
+                    "results\\test4\\CombatAgent\\CombatAgent-99780.pt"
+                ]
+            },
+            {
+                "steps": 149894,
+                "file_path": "results\\test4\\CombatAgent\\CombatAgent-149894.onnx",
+                "reward": null,
+                "creation_time": 1780339702.1805992,
+                "auxillary_file_paths": [
+                    "results\\test4\\CombatAgent\\CombatAgent-149894.pt"
+                ]
+            },
+            {
+                "steps": 168536,
+                "file_path": "results\\test4\\CombatAgent\\CombatAgent-168536.onnx",
+                "reward": 0.7522504925727844,
+                "creation_time": 1780339758.634103,
+                "auxillary_file_paths": [
+                    "results\\test4\\CombatAgent\\CombatAgent-168536.pt"
+                ]
+            }
+        ],
+        "final_checkpoint": {
+            "steps": 168536,
+            "file_path": "results\\test4\\CombatAgent.onnx",
+            "reward": 0.7522504925727844,
+            "creation_time": 1780339758.634103,
+            "auxillary_file_paths": [
+                "results\\test4\\CombatAgent\\CombatAgent-168536.pt"
+            ]
+        }
+    },
+    "metadata": {
+        "stats_format_version": "0.3.0",
+        "mlagents_version": "1.1.0",
+        "torch_version": "2.8.0+cpu"
+    }
+}
