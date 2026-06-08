@@ -3,7 +3,7 @@ using Unity.VisualScripting;
 using UnityEngine;
 
 // Student template: replace BuildTree() with an attacker or defender BT strategy.
-public class MinwooBTStrategy : MonoBehaviour
+public class StudentBTStrategy : MonoBehaviour
 {
     [SerializeField] private CombatCharacter self;
     [SerializeField] private CombatCharacter target;
